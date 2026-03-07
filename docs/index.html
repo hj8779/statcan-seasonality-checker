@@ -101,6 +101,17 @@
     .stat-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: .4rem; }
     .stat-table th { color: #94a3b8; font-weight: 500; padding: .25rem .4rem; }
     .stat-table td { font-weight: 600; padding: .25rem .4rem; }
+    /* ── Live fetch banner ── */
+    .live-banner { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: .5rem;
+                   padding: .7rem 1rem; margin-top: .75rem; display: flex;
+                   align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .live-banner span { font-size: .85rem; color: #0c4a6e; }
+    .btn-sky { background: #0284c7; color: #fff; }
+    .btn-sky:hover { background: #0369a1; }
+    .live-status { font-size: .82rem; padding: .3rem .6rem; border-radius: .35rem; }
+    .live-status.info  { background: #dbeafe; color: #1e3a8a; }
+    .live-status.error { background: #fee2e2; color: #991b1b; }
+    .live-status.ok    { background: #dcfce7; color: #166534; }
     /* ── Export toolbar ── */
     .export-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; margin-top: .75rem; }
     .export-row label { font-size: .8rem; color: #64748b; }
@@ -204,6 +215,15 @@
     </div>
     <div class="model-hint" id="dModelHint" hidden></div>
     <div class="criteria-grid" id="dCriteria"></div>
+
+    <!-- Live fetch (shown when no DB analysis) -->
+    <div id="liveAnalysisRow" hidden>
+      <div class="live-banner">
+        <span>No analysis stored in DB for this vector.</span>
+        <button class="btn btn-sky" id="fetchLiveBtn">Fetch from StatCan &amp; Analyze</button>
+        <span id="liveStatus"></span>
+      </div>
+    </div>
 
     <!-- Export row -->
     <div class="export-row">
@@ -502,10 +522,12 @@ function selectVector(vectorId) {
 
   // Series info
   $('dTitle').textContent  = v.series_title ?? `Vector ${vectorId}`;
+  const dateFrom = v.start_date ?? a?.training_data?.[0]?.date ?? v.latest_pts?.slice(-1)[0]?.date ?? '?';
+  const dateTo   = v.end_date   ?? a?.validation_data?.slice(-1)[0]?.date ?? a?.training_data?.slice(-1)[0]?.date ?? '?';
   $('dMeta').textContent   =
     `Vector ${v.vector_id}  ·  Table ${v.table_id ?? '?'}  ·  ` +
     `${FREQ_LABEL[v.frequency_code] ?? v.frequency_code}  ·  ` +
-    `${v.start_date ?? '?'} → ${v.end_date ?? '?'}`;
+    `${dateFrom} → ${dateTo}`;
 
   // Grade box
   if (a) {
@@ -571,9 +593,18 @@ function selectVector(vectorId) {
     $('openStatcanBtn').disabled = true;
   }
 
-  // Export buttons
-  $('exportCsvBtn').onclick = () => exportCsv(v, a);
-  $('exportJsonBtn').onclick = () => exportJson(v, a);
+  // Live fetch button (show only when no DB analysis)
+  const liveRow = $('liveAnalysisRow');
+  liveRow.hidden = !!a;
+  if (!a) {
+    $('fetchLiveBtn').onclick = () => loadLiveAnalysis(v);
+    $('liveStatus').textContent = '';
+    $('liveStatus').className = 'live-status';
+  }
+
+  // Export buttons (use live data if available, fall back to DB)
+  $('exportCsvBtn').onclick = () => exportCsv(v, v._liveAnalysis ?? a);
+  $('exportJsonBtn').onclick = () => exportJson(v, v._liveAnalysis ?? a);
 
   $('detailPanel').style.display = 'block';
   $('detailPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -661,8 +692,9 @@ function computeAcf(values, maxLag) {
 function renderCharts(v, a) {
   killCharts();
 
-  const td = a?.training_data   ?? v.latest_pts ?? [];
-  const vd = a?.validation_data ?? [];
+  // Sort ascending (latest_pts is stored newest-first in DB)
+  const td = (a?.training_data   ?? v.latest_pts ?? []).slice().sort((x,y) => x.date.localeCompare(y.date));
+  const vd = (a?.validation_data ?? []).slice().sort((x,y) => x.date.localeCompare(y.date));
   const s  = a?.frequency ?? (v.frequency_code === 6 ? 12 : v.frequency_code === 9 ? 4 : 12);
 
   const BLUE   = 'rgba(59,130,246,0.9)',  BLUE_F = 'rgba(59,130,246,0.12)';
@@ -821,6 +853,236 @@ function showExportStatus(msg, type) {
   const el = $('exportStatus');
   el.innerHTML = `<div class="status-msg ${type}">${esc(msg)}</div>`;
   setTimeout(() => { el.innerHTML = ''; }, 4000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StatCan live fetch + full analysis
+// ─────────────────────────────────────────────────────────────────────────────
+const STATCAN_API = 'https://www150.statcan.gc.ca/t1/tbl1/en/dtbl';
+const N_TOTAL = 112, N_VAL = 12, N_TRAIN = 100;
+
+async function statcanFetch(path) {
+  const r = await fetch(STATCAN_API + path);
+  if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + path);
+  return r.json();
+}
+
+function processPoints(pts) {
+  const all = pts.filter(p => p.value !== null)
+    .map(p => ({ date: p.refPer, value: p.value }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const win = all.slice(-N_TOTAL);
+  return { trainingData: win.slice(0, N_TRAIN), validationData: win.slice(N_TRAIN) };
+}
+
+function detectFreq(dates) {
+  const months = new Set(dates.map(d => d.split('-')[1] ?? ''));
+  return months.size >= 10 ? 12 : 4;
+}
+
+function computePacf(acfArr) {
+  const n = acfArr.length;
+  if (n === 0) return [];
+  const getR = j => j === 0 ? 1 : (acfArr[j - 1] ?? 0);
+  const pacf = [acfArr[0]];
+  let phi = [acfArr[0]];
+  for (let k = 1; k < n; k++) {
+    let num = getR(k + 1), den = 1;
+    for (let j = 1; j <= k; j++) { num -= phi[j - 1] * getR(k + 1 - j); den -= phi[j - 1] * getR(j); }
+    const pk = Math.abs(den) > 1e-10 ? num / den : 0;
+    phi = [...phi.map((v, j) => v - pk * (phi[k - 1 - j] ?? 0)), pk];
+    pacf.push(pk);
+  }
+  return pacf;
+}
+
+function lgamma(x) {
+  const c = [76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,1.208650973866179e-3,-5.395239384953e-6];
+  let y = x, tmp = x + 5.5 - (x + 0.5) * Math.log(x + 5.5), ser = 1.000000000190015;
+  for (const ci of c) ser += ci / ++y;
+  return -tmp + Math.log(2.5066282746310005 * ser / x);
+}
+
+function ibeta(x, a, b) {
+  if (x <= 0) return 0; if (x >= 1) return 1;
+  if (x > (a + 1) / (a + b + 2)) return 1 - ibeta(1 - x, b, a);
+  const lnB = lgamma(a) + lgamma(b) - lgamma(a + b);
+  const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lnB) / a;
+  const FPMIN = 1e-30, EPS = 3e-7;
+  let c = 1, d = 1 - (a + b) * x / (a + 1);
+  if (Math.abs(d) < FPMIN) d = FPMIN; d = 1 / d; let h = d;
+  for (let m = 1; m <= 200; m++) {
+    let aa = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d; h *= d * c;
+    aa = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d; const del = d * c; h *= del;
+    if (Math.abs(del - 1) < EPS) break;
+  }
+  return front * h;
+}
+
+function fPValue(f, d1, d2) {
+  if (f <= 0) return 1;
+  return ibeta(d2 / (d2 + d1 * f), d2 / 2, d1 / 2);
+}
+
+function fullAnalyze(trainingData) {
+  const s = detectFreq(trainingData.map(d => d.date));
+  const values = trainingData.map(d => d.value);
+  const n = values.length;
+  const bound = 1.96 / Math.sqrt(n);
+  const acf  = computeAcf(values, 2 * s);
+  const pacf = computePacf(acf);
+  const acfAtS = acf[s - 1] ?? 0;
+  const acfSig = Math.abs(acfAtS) > bound;
+
+  const groups = Array.from({ length: s }, () => []);
+  for (const { date, value } of trainingData) {
+    const m = parseInt((date.split('-')[1] ?? '1'), 10);
+    groups[(m - 1) % s].push(value);
+  }
+  const grandMean = mean(values);
+  const seasonalMeans = groups.map(g => g.length ? mean(g) : 0);
+  const ssBw = groups.reduce((a, g, j) => a + g.length * (seasonalMeans[j] - grandMean) ** 2, 0);
+  const ssWi = groups.reduce((a, g, j) => a + g.reduce((b, x) => b + (x - seasonalMeans[j]) ** 2, 0), 0);
+  const dfB = s - 1, dfW = n - s;
+  const fStat  = dfW > 0 && ssWi > 0 ? (ssBw / dfB) / (ssWi / dfW) : 0;
+  const pValue = fPValue(fStat, dfB, dfW);
+  const fSig   = pValue < 0.05;
+  const verdict = (acfSig && fSig) ? 'seasonal' : (!acfSig && !fSig) ? 'not_seasonal' : 'inconclusive';
+
+  // Complexity (6 criteria)
+  const isSeasonalLag = i => i === s - 1 || i === 2 * s - 1;
+  const sigAcfNS  = acf.slice(0, 2*s).filter((_, i) => !isSeasonalLag(i) && Math.abs(acf[i])  > bound).length;
+  const sigPacfNS = acf.slice(0, 2*s).filter((_, i) => !isSeasonalLag(i) && Math.abs(pacf[i] ?? 0) > bound).length;
+  const acfAt2S   = Math.abs(acf[2 * s - 1] ?? 0);
+  const pacfAtS   = Math.abs(pacf[s - 1] ?? 0);
+  const mixed     = sigAcfNS > 1 && sigPacfNS > 1;
+  const r1        = Math.abs(acf[0] ?? 0);
+  const ss_ratio  = bound > 0 ? Math.abs(acfAtS) / bound : 0;
+
+  const crit = [
+    { name: 'Strong seasonal pattern',           pass: ss_ratio > 3,   value: `ACF(s) = ${Math.abs(acfAtS).toFixed(3)}  (${ss_ratio.toFixed(1)}× bound)` },
+    { name: 'Non-stationarity (needs d≥1)',       pass: r1 > 0.6,       value: `r₁ = ${r1.toFixed(3)}` },
+    { name: 'Complex AR structure (PACF ≥2 NS)',  pass: sigPacfNS > 1,  value: `${sigPacfNS} sig non-seasonal PACF lags` },
+    { name: 'Complex MA structure (ACF ≥2 NS)',   pass: sigAcfNS > 1,   value: `${sigAcfNS} sig non-seasonal ACF lags` },
+    { name: 'Mixed ARMA (both ACF & PACF tail)',  pass: mixed,          value: mixed ? 'Both tail off' : 'One cuts off sharply' },
+    { name: 'Seasonal ARMA component (P or Q≥1)', pass: acfAt2S > bound || pacfAtS > bound, value: `ACF(2s)=${acfAt2S.toFixed(3)}  PACF(s)=${pacfAtS.toFixed(3)}` },
+  ];
+  const score = crit.filter(c => c.pass).length;
+  const GRADES = ['AVOID (0/6)','AVOID (1/6)','MARGINAL (2/6)','MARGINAL (3/6)','GOOD (4/6)','EXCELLENT (5/6)','EXCELLENT (6/6)'];
+  const GCOLORS = ['#991b1b','#b91c1c','#92400e','#78350f','#1e3a8a','#166534','#14532d'];
+  const grade = GRADES[score] ?? String(score);
+  const gradeColor = GCOLORS[score] ?? '#374151';
+
+  const p = sigPacfNS > 0 ? Math.min(sigPacfNS, 2) : 1;
+  const q = sigAcfNS  > 0 ? Math.min(sigAcfNS,  2) : 1;
+  const P = pacfAtS > bound ? 1 : 0;
+  const Q = Math.abs(acfAtS) > bound ? 1 : 0;
+  const d = r1 > 0.5 ? 1 : 0;
+  const modelHint = `Tentative model: SARIMA(${p},${d},${q})(${P},1,${Q})_${s} — verify with ACF/PACF diagnostics`;
+
+  return { s, acf, pacf, bound, acfAtS, acfSig, fStat, pValue, fSig, verdict,
+           seasonalMeans, score, grade, gradeColor, crit, modelHint };
+}
+
+async function loadLiveAnalysis(v) {
+  const setLive = (msg, cls) => {
+    $('liveStatus').textContent = msg;
+    $('liveStatus').className = `live-status ${cls}`;
+  };
+  $('fetchLiveBtn').disabled = true;
+  setLive('Fetching from Statistics Canada…', 'info');
+
+  try {
+    const dataArr = await statcanFetch(`!getDataFromVectorAndLatestNPeriods/${v.vector_id}/112`);
+    const dataItem = dataArr[0];
+    if (dataItem?.status !== 'SUCCESS') throw new Error(`Vector ${v.vector_id} not found on StatCan`);
+
+    setLive('Running analysis…', 'info');
+    const { trainingData, validationData } = processPoints(dataItem.object.vectorDataPoint);
+    if (trainingData.length < 24) throw new Error(`Only ${trainingData.length} obs — need ≥ 24`);
+
+    const ana = fullAnalyze(trainingData);
+
+    // Build a pseudo analysis_result object matching the DB shape
+    const liveA = {
+      frequency:          ana.s,
+      acf_at_seasonal_lag: ana.acfAtS,
+      acf_bound_95:        ana.bound,
+      acf_significant:     ana.acfSig,
+      f_stat:              ana.fStat,
+      f_df_between:        ana.s - 1,
+      f_df_within:         trainingData.length - ana.s,
+      f_p_value:           ana.pValue,
+      f_significant:       ana.fSig,
+      verdict:             ana.verdict,
+      complexity_score:    ana.score,
+      complexity_grade:    ana.grade,
+      model_hint:          ana.modelHint,
+      training_data:       trainingData,
+      validation_data:     validationData,
+    };
+
+    // Stash on the vector object so export buttons can use it
+    v._liveAnalysis = liveA;
+
+    // Re-render everything using live data
+    const gradeShort = ana.grade.replace(/\s*\(\d\/6\)/, '').trim();
+    $('dGradeVal').textContent = gradeShort;
+    $('dGradeVal').style.color = ana.gradeColor;
+    $('dGradeSub').textContent = `${ana.score} / 6 criteria met`;
+    $('dModelHint').textContent = ana.modelHint;
+    $('dModelHint').hidden = false;
+
+    // Criteria
+    $('dCriteria').innerHTML = ana.crit.map(c =>
+      `<div class="criterion ${c.pass ? 'pass' : 'fail'}">
+        <span class="icon">${c.pass ? '✓' : '✗'}</span>
+        <span class="cname">${esc(c.name)}</span>
+        <span class="cval">${esc(c.value)}</span>
+      </div>`
+    ).join('');
+
+    // Verdict panel
+    const VCOLOR = { seasonal: '#166534', not_seasonal: '#1e3a8a', inconclusive: '#92400e' };
+    const VBGC   = { seasonal: '#dcfce7', not_seasonal: '#dbeafe', inconclusive: '#fef3c7' };
+    const VLBL   = { seasonal: 'SEASONAL', not_seasonal: 'NOT SEASONAL', inconclusive: 'INCONCLUSIVE' };
+    const vb = $('verdictBox');
+    vb.style.background  = VBGC[ana.verdict]  ?? '#f1f5f9';
+    vb.style.borderColor = VCOLOR[ana.verdict] ?? '#e2e8f0';
+    vb.style.color       = VCOLOR[ana.verdict] ?? '#475569';
+    $('verdictTag').textContent = VLBL[ana.verdict] ?? ana.verdict;
+    $('lagLbl').textContent     = ana.s;
+    $('dAcfStat').textContent   = ana.acfAtS.toFixed(4);
+    $('dAcfBound').textContent  = `±${ana.bound.toFixed(4)}`;
+    $('dFStat').textContent     = ana.fStat.toFixed(3);
+    $('dFPval').textContent     = ana.pValue < 0.0001 ? '< 0.0001' : ana.pValue.toFixed(4);
+
+    // Charts
+    renderCharts(v, liveA);
+
+    // Date meta
+    const dateFrom = trainingData[0]?.date ?? '?';
+    const dateTo   = validationData.slice(-1)[0]?.date ?? trainingData.slice(-1)[0]?.date ?? '?';
+    $('dMeta').textContent =
+      `Vector ${v.vector_id}  ·  Table ${v.table_id ?? '?'}  ·  ` +
+      `${FREQ_LABEL[v.frequency_code] ?? v.frequency_code}  ·  ` +
+      `${dateFrom} → ${dateTo}`;
+
+    // Export buttons now use live data
+    $('exportCsvBtn').onclick = () => exportCsv(v, liveA);
+    $('exportJsonBtn').onclick = () => exportJson(v, liveA);
+
+    setLive(`Done — ${trainingData.length} training + ${validationData.length} validation obs (live from StatCan).`, 'ok');
+  } catch (err) {
+    setLive('Error: ' + (err.message ?? err), 'error');
+    $('fetchLiveBtn').disabled = false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
