@@ -1043,6 +1043,32 @@ async function loadLiveAnalysis(v) {
     // Stash on the vector object so export buttons can use it
     v._liveAnalysis = liveA;
 
+    // Save to DB (analysis_results) so it's cached for next visit
+    setLive('Saving to database…', 'info');
+    const { error: saveErr } = await db.from('analysis_results').insert({
+      vector_id:            v.vector_id,
+      frequency:            liveA.frequency,
+      acf_at_seasonal_lag:  liveA.acf_at_seasonal_lag,
+      acf_bound_95:         liveA.acf_bound_95,
+      acf_significant:      liveA.acf_significant,
+      f_stat:               liveA.f_stat,
+      f_df_between:         liveA.f_df_between,
+      f_df_within:          liveA.f_df_within,
+      f_p_value:            liveA.f_p_value,
+      f_significant:        liveA.f_significant,
+      verdict:              liveA.verdict,
+      complexity_score:     liveA.complexity_score,
+      complexity_grade:     liveA.complexity_grade,
+      model_hint:           liveA.model_hint,
+      training_data:        liveA.training_data,
+      validation_data:      liveA.validation_data,
+    });
+    if (!saveErr) {
+      // Mark vector as having analysis so banner hides on re-select
+      v._analysis = liveA;
+      $('liveAnalysisRow').hidden = true;
+    }
+
     // Re-render everything using live data
     const gradeShort = ana.grade.replace(/\s*\(\d\/6\)/, '').trim();
     $('dGradeVal').textContent = gradeShort;
@@ -1090,7 +1116,8 @@ async function loadLiveAnalysis(v) {
     $('exportCsvBtn').onclick = () => exportCsv(v, liveA);
     $('exportJsonBtn').onclick = () => exportJson(v, liveA);
 
-    setLive(`Done — ${trainingData.length} training + ${validationData.length} validation obs (live from StatCan).`, 'ok');
+    const savedNote = saveErr ? ' (DB save failed — check RLS policy)' : ' · Saved to DB';
+    setLive(`Done — ${trainingData.length} training + ${validationData.length} validation obs${savedNote}.`, 'ok');
   } catch (err) {
     setLive('Error: ' + (err.message ?? err), 'error');
     $('fetchLiveBtn').disabled = false;
