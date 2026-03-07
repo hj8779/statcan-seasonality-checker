@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CANSIM Vector Explorer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f8fafc; color: #1e293b; padding: 1.5rem; max-width: 1300px; margin: 0 auto; }
+    header { margin-bottom: 1.5rem; }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header p  { color: #64748b; font-size: .9rem; margin-top: .25rem; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem; padding: 1.25rem; margin-bottom: 1.25rem; }
+    /* ── DB status pill ── */
+    #dbPill { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem; font-weight: 600;
+              padding: .25rem .65rem; border-radius: 9999px; border: 1px solid; margin-bottom: 1rem; }
+    #dbPill.connecting { background: #fef9c3; border-color: #fde047; color: #713f12; }
+    #dbPill.connected  { background: #dcfce7; border-color: #86efac; color: #14532d; }
+    #dbPill.error      { background: #fee2e2; border-color: #fca5a5; color: #7f1d1d; }
+    #dbPill .dot { width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
+    /* ── Toolbar ── */
+    .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+    input[type=search], select { padding: .45rem .75rem; border: 1px solid #cbd5e1;
+      border-radius: .5rem; font-size: .875rem; color: #1e293b; background: #fff; }
+    input[type=search] { width: 22rem; }
+    select { cursor: pointer; }
+    .btn { padding: .45rem 1rem; border: none; border-radius: .5rem; cursor: pointer;
+           font-size: .85rem; font-weight: 600; }
+    .btn-primary { background: #1e40af; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-green { background: #166534; color: #fff; }
+    .btn-green:hover { background: #15803d; }
+    .count-badge { font-size: .8rem; color: #64748b; margin-left: auto; }
+    /* ── Vectors table ── */
+    .tbl-wrap { overflow-x: auto; }
+    table.vtbl { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    table.vtbl thead th { background: #f8fafc; color: #64748b; font-weight: 600;
+      font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+      padding: .55rem .75rem; border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+      cursor: pointer; user-select: none; }
+    table.vtbl thead th:hover { color: #1e40af; }
+    table.vtbl thead th .sort-icon { margin-left: .25rem; opacity: .4; }
+    table.vtbl thead th.active .sort-icon { opacity: 1; color: #1e40af; }
+    table.vtbl tbody tr { border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background .1s; }
+    table.vtbl tbody tr:hover { background: #f0f7ff; }
+    table.vtbl tbody tr.selected { background: #dbeafe; }
+    table.vtbl td { padding: .5rem .75rem; vertical-align: middle; }
+    .td-title { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .verdict-chip { display: inline-block; font-size: .72rem; font-weight: 700;
+                    padding: .15rem .5rem; border-radius: 9999px; }
+    .v-seasonal     { background: #dcfce7; color: #166534; }
+    .v-not_seasonal { background: #dbeafe; color: #1e3a8a; }
+    .v-inconclusive { background: #fef3c7; color: #92400e; }
+    .v-none         { background: #f1f5f9; color: #94a3b8; }
+    .grade-chip { font-size: .72rem; font-weight: 700; padding: .15rem .5rem; border-radius: .25rem; }
+    .g-excellent { background: #dcfce7; color: #14532d; }
+    .g-good      { background: #dbeafe; color: #1e3a8a; }
+    .g-marginal  { background: #fef9c3; color: #713f12; }
+    .g-avoid     { background: #fee2e2; color: #7f1d1d; }
+    .g-none      { background: #f1f5f9; color: #94a3b8; }
+    .acf-bar { display: flex; align-items: center; gap: .4rem; }
+    .acf-bar-fill { height: .5rem; border-radius: 9999px; background: #3b82f6; min-width: 2px; }
+    .acf-val { font-variant-numeric: tabular-nums; min-width: 3rem; }
+    /* ── Empty / loading states ── */
+    .tbl-placeholder { padding: 3rem; text-align: center; color: #94a3b8; font-size: .9rem; }
+    /* ── Detail panel ── */
+    #detailPanel { display: none; }
+    .info-header { display: flex; justify-content: space-between; align-items: flex-start;
+                   gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .series-title  { font-weight: 700; font-size: 1.05rem; margin-bottom: .3rem; }
+    .series-meta   { font-size: .8rem; color: #64748b; }
+    .grade-box { text-align: center; background: #f8fafc; border: 1px solid #e2e8f0;
+                 border-radius: .5rem; padding: .7rem 1.1rem; min-width: 170px; }
+    .grade-label { font-size: .7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+    .grade-value { font-size: 1.5rem; font-weight: 800; margin: .15rem 0; }
+    .grade-sub   { font-size: .75rem; color: #64748b; }
+    .model-hint  { font-size: .85rem; background: #fffbeb; border: 1px solid #fde68a;
+                   border-radius: .4rem; padding: .5rem .75rem; margin-bottom: .75rem; color: #78350f; }
+    .criteria-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: .5rem; }
+    .criterion { display: grid; grid-template-columns: 1.2rem 1fr; grid-template-rows: auto auto;
+                 column-gap: .4rem; padding: .5rem .6rem; border-radius: .4rem; font-size: .82rem; }
+    .criterion.pass { background: #f0fdf4; border: 1px solid #bbf7d0; }
+    .criterion.fail { background: #fff1f2; border: 1px solid #fecdd3; }
+    .criterion .icon { font-size: 1rem; grid-row: 1/3; align-self: center; }
+    .criterion.pass .icon { color: #16a34a; }
+    .criterion.fail .icon { color: #dc2626; }
+    .cname { font-weight: 600; color: #374151; }
+    .cval  { color: #6b7280; font-size: .78rem; }
+    /* ── Charts ── */
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }
+    .chart-title { font-size: .78rem; font-weight: 600; color: #64748b;
+                   text-transform: uppercase; letter-spacing: .04em; margin-bottom: .75rem; }
+    canvas { max-height: 250px; }
+    /* ── Verdict box ── */
+    .verdict-box { border-radius: .4rem; padding: .75rem 1rem; border: 1px solid; margin-bottom: .75rem; }
+    .verdict-tag { font-weight: 800; font-size: 1.1rem; letter-spacing: .04em; margin-bottom: .4rem; }
+    .stat-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: .4rem; }
+    .stat-table th { color: #94a3b8; font-weight: 500; padding: .25rem .4rem; }
+    .stat-table td { font-weight: 600; padding: .25rem .4rem; }
+    /* ── Export toolbar ── */
+    .export-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; margin-top: .75rem; }
+    .export-row label { font-size: .8rem; color: #64748b; }
+    /* ── Status message ── */
+    .status-msg { font-size: .85rem; padding: .45rem .75rem; border-radius: .4rem; margin-top: .5rem; }
+    .status-msg.info  { background: #dbeafe; color: #1e3a8a; }
+    .status-msg.error { background: #fee2e2; color: #991b1b; }
+    /* ── Pagination ── */
+    .pagination { display: flex; gap: .4rem; align-items: center; margin-top: .75rem; }
+    .pagination button { padding: .3rem .65rem; border-radius: .35rem; border: 1px solid #e2e8f0;
+                         background: #fff; cursor: pointer; font-size: .8rem; color: #475569; }
+    .pagination button:disabled { opacity: .4; cursor: default; }
+    .pagination button.active { background: #1e40af; color: #fff; border-color: #1e40af; }
+    .pagination .page-info { font-size: .8rem; color: #64748b; margin: 0 .4rem; }
+    @media (max-width: 768px) {
+      .chart-row { grid-template-columns: 1fr; }
+      input[type=search] { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>CANSIM Vector Explorer</h1>
+  <p>Browse scanned Statistics Canada vectors, view seasonality reports, and export data.</p>
+</header>
+
+<!-- ── DB panel ── -->
+<div class="card">
+  <div id="dbPill" class="connecting"><div class="dot"></div><span id="dbPillText">Connecting…</span></div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <input type="search" id="searchInput" placeholder="Search title, vector ID, or table ID…" />
+    <select id="filterVerdict">
+      <option value="">All verdicts</option>
+      <option value="seasonal">Seasonal</option>
+      <option value="not_seasonal">Not seasonal</option>
+      <option value="inconclusive">Inconclusive</option>
+      <option value="none">Not analysed</option>
+    </select>
+    <select id="filterFreq">
+      <option value="">All frequencies</option>
+      <option value="6">Monthly</option>
+      <option value="9">Quarterly</option>
+      <option value="12">Annual</option>
+      <option value="1">Daily</option>
+    </select>
+    <select id="filterGrade">
+      <option value="">All grades</option>
+      <option value="EXCELLENT">Excellent</option>
+      <option value="GOOD">Good</option>
+      <option value="MARGINAL">Marginal</option>
+      <option value="AVOID">Avoid</option>
+    </select>
+    <button class="btn btn-secondary" id="resetBtn">Reset</button>
+    <span class="count-badge" id="countBadge"></span>
+  </div>
+
+  <!-- Table -->
+  <div class="tbl-wrap">
+    <table class="vtbl">
+      <thead>
+        <tr>
+          <th data-col="vectorId">Vector ID <span class="sort-icon">&#8597;</span></th>
+          <th data-col="tableId">Table ID <span class="sort-icon">&#8597;</span></th>
+          <th data-col="seriesTitle">Series Title <span class="sort-icon">&#8597;</span></th>
+          <th data-col="frequencyCode">Freq <span class="sort-icon">&#8597;</span></th>
+          <th data-col="acfScore">ACF(s) <span class="sort-icon">&#8597;</span></th>
+          <th data-col="complexityScore">Grade <span class="sort-icon">&#8597;</span></th>
+          <th data-col="verdict">Verdict <span class="sort-icon">&#8597;</span></th>
+          <th data-col="stationarity">Stationarity <span class="sort-icon">&#8597;</span></th>
+          <th data-col="scannedAt">Scanned <span class="sort-icon">&#8597;</span></th>
+        </tr>
+      </thead>
+      <tbody id="vectorsTbody">
+        <tr><td colspan="9" class="tbl-placeholder">Loading vectors from database…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="paginationBar"></div>
+</div>
+
+<!-- ── Detail panel ── -->
+<div id="detailPanel">
+
+  <!-- Series info + grade -->
+  <div class="card">
+    <div class="info-header">
+      <div>
+        <div class="series-title" id="dTitle">—</div>
+        <div class="series-meta" id="dMeta">—</div>
+      </div>
+      <div class="grade-box">
+        <div class="grade-label">Assignment suitability</div>
+        <div class="grade-value" id="dGradeVal">—</div>
+        <div class="grade-sub" id="dGradeSub">—</div>
+      </div>
+    </div>
+    <div class="model-hint" id="dModelHint" hidden></div>
+    <div class="criteria-grid" id="dCriteria"></div>
+
+    <!-- Export row -->
+    <div class="export-row">
+      <label>Export CANSIM data:</label>
+      <button class="btn btn-green" id="exportCsvBtn">Download CSV</button>
+      <button class="btn btn-secondary" id="exportJsonBtn">Download JSON</button>
+      <button class="btn btn-secondary" id="openStatcanBtn">Open on StatCan</button>
+    </div>
+    <div id="exportStatus"></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="card">
+    <h3 class="chart-title">Time Series  (blue = training · orange = validation)</h3>
+    <canvas id="tsChart"></canvas>
+  </div>
+
+  <div class="chart-row">
+    <div class="card">
+      <h3 class="chart-title">ACF  (red bars = seasonal lags)</h3>
+      <canvas id="acfChart"></canvas>
+    </div>
+    <div class="card">
+      <h3 class="chart-title">Seasonal Means</h3>
+      <canvas id="smChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="chart-title">Seasonality Tests</h3>
+    <div id="verdictBox" class="verdict-box">
+      <div id="verdictTag" class="verdict-tag"></div>
+      <table class="stat-table">
+        <tr>
+          <th>ACF r<sub id="lagLbl">s</sub></th><td id="dAcfStat">—</td>
+          <th>95% bound</th><td id="dAcfBound">—</td>
+        </tr>
+        <tr>
+          <th>F statistic</th><td id="dFStat">—</td>
+          <th>p-value</th><td id="dFPval">—</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /detailPanel -->
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG  —  fill in your Supabase project URL and anon key
+// The anon key is safe to expose here (designed for public browser use).
+// Make sure Row Level Security (RLS) is enabled on your tables in Supabase.
+// ─────────────────────────────────────────────────────────────────────────────
+const SUPABASE_URL      = 'https://zrbaxgphijwzzcexdkrb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpyYmF4Z3BoaWp3enpjZXhka3JiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyODgxNDEsImV4cCI6MjA4Nzg2NDE0MX0.eug8NtvmDB7iWIAWIQx53yqKyGOI4iSRD1KSEoZY4is';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Supabase client  (auto-initialised, no manual connection needed)
+// ─────────────────────────────────────────────────────────────────────────────
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let allVectors   = [];   // full list from DB (vectors + latest analysis join)
+let filtered     = [];   // after search/filter
+let sortCol      = 'acfScore';
+let sortDir      = -1;   // -1 = desc, 1 = asc
+let page         = 0;
+const PAGE_SIZE  = 30;
+let selectedId   = null; // selected vectorId
+let activeCharts = {};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DB: load all vectors + latest analysis_results in one fetch
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadVectors() {
+  setPill('connecting', 'Connecting…');
+  try {
+    // 1. Fetch all vectors
+    const { data: vecs, error: vErr } = await db
+      .from('vectors')
+      .select('*')
+      .order('acf_score', { ascending: false, nullsFirst: false });
+
+    if (vErr) throw vErr;
+
+    // 2. Fetch latest analysis per vector (select distinct on vector_id)
+    //    Supabase doesn't support DISTINCT ON via PostgREST, so we fetch all
+    //    ordered by analysed_at desc and de-duplicate client-side.
+    const { data: analyses, error: aErr } = await db
+      .from('analysis_results')
+      .select('vector_id, analysed_at, frequency, acf_at_seasonal_lag, acf_bound_95, acf_significant, f_stat, f_df_between, f_df_within, f_p_value, f_significant, verdict, complexity_score, complexity_grade, model_hint, training_data, validation_data')
+      .order('analysed_at', { ascending: false });
+
+    if (aErr) throw aErr;
+
+    // De-duplicate: keep first (most recent) per vector_id
+    const analysisMap = {};
+    for (const a of (analyses ?? [])) {
+      if (!analysisMap[a.vector_id]) analysisMap[a.vector_id] = a;
+    }
+
+    // Merge
+    allVectors = (vecs ?? []).map(v => ({
+      ...v,
+      _analysis: analysisMap[v.vector_id] ?? null,
+    }));
+
+    setPill('connected', `Connected — ${allVectors.length} vectors`);
+    applyFilters();
+  } catch (err) {
+    setPill('error', 'Connection error');
+    $('vectorsTbody').innerHTML =
+      `<tr><td colspan="9" class="tbl-placeholder" style="color:#dc2626">
+        Error: ${esc(err.message)}<br>
+        <small>Check your SUPABASE_ANON_KEY in the page source.</small>
+       </td></tr>`;
+    console.error(err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter + sort + render table
+// ─────────────────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const q       = $('searchInput').value.trim().toLowerCase();
+  const verdict = $('filterVerdict').value;
+  const freq    = $('filterFreq').value;
+  const grade   = $('filterGrade').value;
+
+  filtered = allVectors.filter(v => {
+    const a = v._analysis;
+    if (q) {
+      const hay = `${v.vector_id} ${v.table_id ?? ''} ${v.series_title ?? ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (verdict === 'none') {
+      if (a?.verdict) return false;
+    } else if (verdict) {
+      if ((a?.verdict ?? '') !== verdict) return false;
+    }
+    if (freq && String(v.frequency_code) !== freq) return false;
+    if (grade && !((a?.complexity_grade ?? '').startsWith(grade))) return false;
+    return true;
+  });
+
+  // Sort
+  filtered.sort((a, b) => {
+    let av = getColVal(a, sortCol), bv = getColVal(b, sortCol);
+    if (av === null || av === undefined) return 1;
+    if (bv === null || bv === undefined) return -1;
+    if (typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * (av - bv);
+  });
+
+  page = 0;
+  renderTable();
+}
+
+function getColVal(v, col) {
+  const a = v._analysis;
+  switch (col) {
+    case 'vectorId':        return v.vector_id;
+    case 'tableId':         return v.table_id;
+    case 'seriesTitle':     return v.series_title;
+    case 'frequencyCode':   return v.frequency_code;
+    case 'acfScore':        return v.acf_score;
+    case 'stationarity':    return v.stationarity;
+    case 'scannedAt':       return v.scanned_at;
+    case 'complexityScore': return a?.complexity_score ?? -1;
+    case 'verdict':         return a?.verdict ?? '';
+    default:                return null;
+  }
+}
+
+const FREQ_LABEL = { 1: 'Daily', 6: 'Monthly', 9: 'Quarterly', 12: 'Annual' };
+
+function verdictChip(v) {
+  if (!v) return `<span class="verdict-chip v-none">—</span>`;
+  const labels = { seasonal: 'Seasonal', not_seasonal: 'Not seasonal', inconclusive: 'Inconclusive' };
+  return `<span class="verdict-chip v-${v}">${labels[v] ?? v}</span>`;
+}
+
+function gradeChip(g) {
+  if (!g) return `<span class="grade-chip g-none">—</span>`;
+  const cls = g.startsWith('EXCELLENT') ? 'g-excellent'
+            : g.startsWith('GOOD')      ? 'g-good'
+            : g.startsWith('MARGINAL')  ? 'g-marginal'
+            : g.startsWith('AVOID')     ? 'g-avoid' : 'g-none';
+  const short = g.replace(/\s*\(\d\/6\)/, '').trim();
+  return `<span class="grade-chip ${cls}">${esc(short)}</span>`;
+}
+
+function acfBar(score) {
+  if (score === null || score === undefined) return '—';
+  const pct = Math.min(Math.abs(score) * 100, 100).toFixed(0);
+  const color = Math.abs(score) > 0.5 ? '#3b82f6' : Math.abs(score) > 0.2 ? '#f59e0b' : '#94a3b8';
+  return `<div class="acf-bar">
+    <div class="acf-bar-fill" style="width:${pct}px;background:${color}"></div>
+    <span class="acf-val">${score.toFixed(3)}</span>
+  </div>`;
+}
+
+function fmtDate(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function renderTable() {
+  const start = page * PAGE_SIZE;
+  const pageRows = filtered.slice(start, start + PAGE_SIZE);
+
+  $('countBadge').textContent = `${filtered.length} vector${filtered.length !== 1 ? 's' : ''} shown`;
+
+  if (pageRows.length === 0) {
+    $('vectorsTbody').innerHTML =
+      `<tr><td colspan="9" class="tbl-placeholder">No vectors match the current filters.</td></tr>`;
+    renderPagination();
+    return;
+  }
+
+  const rows = pageRows.map(v => {
+    const a   = v._analysis;
+    const sel = v.vector_id === selectedId ? ' selected' : '';
+    return `<tr class="${sel}" data-vid="${v.vector_id}">
+      <td>${esc(v.vector_id)}</td>
+      <td><code style="font-size:.78rem">${esc(v.table_id)}</code></td>
+      <td class="td-title" title="${esc(v.series_title)}">${esc(v.series_title ?? '—')}</td>
+      <td>${esc(FREQ_LABEL[v.frequency_code] ?? v.frequency_code)}</td>
+      <td>${acfBar(v.acf_score)}</td>
+      <td>${gradeChip(a?.complexity_grade)}</td>
+      <td>${verdictChip(a?.verdict)}</td>
+      <td>${v.stationarity !== null && v.stationarity !== undefined ? v.stationarity.toFixed(3) : '—'}</td>
+      <td style="white-space:nowrap">${fmtDate(v.scanned_at)}</td>
+    </tr>`;
+  });
+
+  $('vectorsTbody').innerHTML = rows.join('');
+
+  // Row click
+  $('vectorsTbody').querySelectorAll('tr[data-vid]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const vid = parseInt(tr.dataset.vid, 10);
+      selectVector(vid);
+    });
+  });
+
+  renderPagination();
+}
+
+function renderPagination() {
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const bar = $('paginationBar');
+  if (totalPages <= 1) { bar.innerHTML = ''; return; }
+
+  let html = `<button ${page === 0 ? 'disabled' : ''} data-go="${page - 1}">&larr;</button>`;
+  for (let i = 0; i < totalPages; i++) {
+    html += `<button class="${i === page ? 'active' : ''}" data-go="${i}">${i + 1}</button>`;
+  }
+  html += `<button ${page === totalPages - 1 ? 'disabled' : ''} data-go="${page + 1}">&rarr;</button>`;
+  html += `<span class="page-info">Page ${page + 1} / ${totalPages}</span>`;
+  bar.innerHTML = html;
+
+  bar.querySelectorAll('button[data-go]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      page = parseInt(btn.dataset.go, 10);
+      renderTable();
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Select vector → render detail panel
+// ─────────────────────────────────────────────────────────────────────────────
+function selectVector(vectorId) {
+  selectedId = vectorId;
+  const v = allVectors.find(x => x.vector_id === vectorId);
+  if (!v) return;
+
+  // Highlight row
+  $('vectorsTbody').querySelectorAll('tr').forEach(tr => {
+    tr.classList.toggle('selected', parseInt(tr.dataset.vid, 10) === vectorId);
+  });
+
+  const a = v._analysis;
+
+  // Series info
+  $('dTitle').textContent  = v.series_title ?? `Vector ${vectorId}`;
+  $('dMeta').textContent   =
+    `Vector ${v.vector_id}  ·  Table ${v.table_id ?? '?'}  ·  ` +
+    `${FREQ_LABEL[v.frequency_code] ?? v.frequency_code}  ·  ` +
+    `${v.start_date ?? '?'} → ${v.end_date ?? '?'}`;
+
+  // Grade box
+  if (a) {
+    const gradeShort = (a.complexity_grade ?? '').replace(/\s*\(\d\/6\)/, '').trim();
+    const gradeColor = a.complexity_grade?.startsWith('EXCELLENT') ? '#14532d'
+                     : a.complexity_grade?.startsWith('GOOD')      ? '#1e3a8a'
+                     : a.complexity_grade?.startsWith('MARGINAL')  ? '#78350f'
+                     : '#7f1d1d';
+    $('dGradeVal').textContent  = gradeShort;
+    $('dGradeVal').style.color  = gradeColor;
+    $('dGradeSub').textContent  = `${a.complexity_score ?? '?'} / 6 criteria met`;
+  } else {
+    $('dGradeVal').textContent = '—';
+    $('dGradeSub').textContent = 'Not analysed yet';
+  }
+
+  // Model hint
+  if (a?.model_hint) {
+    $('dModelHint').textContent = a.model_hint;
+    $('dModelHint').hidden = false;
+  } else {
+    $('dModelHint').hidden = true;
+  }
+
+  // Criteria (reconstruct from stored vectors fields as best effort)
+  renderCriteria(v, a);
+
+  // Verdict + stats
+  if (a) {
+    const VCOLOR = { seasonal: '#166534', not_seasonal: '#1e3a8a', inconclusive: '#92400e' };
+    const VBGC   = { seasonal: '#dcfce7', not_seasonal: '#dbeafe', inconclusive: '#fef3c7' };
+    const VLBL   = { seasonal: 'SEASONAL', not_seasonal: 'NOT SEASONAL', inconclusive: 'INCONCLUSIVE' };
+    const vb = $('verdictBox');
+    vb.style.background  = VBGC[a.verdict]  ?? '#f1f5f9';
+    vb.style.borderColor = VCOLOR[a.verdict] ?? '#e2e8f0';
+    vb.style.color       = VCOLOR[a.verdict] ?? '#475569';
+    $('verdictTag').textContent = VLBL[a.verdict] ?? a.verdict ?? '—';
+    $('lagLbl').textContent     = a.frequency ?? 's';
+    $('dAcfStat').textContent   = a.acf_at_seasonal_lag?.toFixed(4) ?? '—';
+    $('dAcfBound').textContent  = a.acf_bound_95 !== null ? `±${a.acf_bound_95.toFixed(4)}` : '—';
+    $('dFStat').textContent     = a.f_stat?.toFixed(3) ?? '—';
+    $('dFPval').textContent     = a.f_p_value !== null
+      ? (a.f_p_value < 0.0001 ? '< 0.0001' : a.f_p_value.toFixed(4))
+      : '—';
+  } else {
+    $('verdictBox').style.background  = '#f1f5f9';
+    $('verdictBox').style.borderColor = '#e2e8f0';
+    $('verdictBox').style.color       = '#94a3b8';
+    $('verdictTag').textContent = 'No analysis in database';
+    ['dAcfStat','dAcfBound','dFStat','dFPval'].forEach(id => $(id).textContent = '—');
+  }
+
+  // Charts
+  renderCharts(v, a);
+
+  // StatCan link
+  if (v.table_id) {
+    const pid = v.table_id.replace(/-/g, '');
+    $('openStatcanBtn').onclick = () =>
+      window.open(`https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=${pid}`, '_blank');
+    $('openStatcanBtn').disabled = false;
+  } else {
+    $('openStatcanBtn').disabled = true;
+  }
+
+  // Export buttons
+  $('exportCsvBtn').onclick = () => exportCsv(v, a);
+  $('exportJsonBtn').onclick = () => exportJson(v, a);
+
+  $('detailPanel').style.display = 'block';
+  $('detailPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Criteria grid (from vectors fields)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderCriteria(v, a) {
+  if (!a) {
+    $('dCriteria').innerHTML = '<p style="font-size:.82rem;color:#94a3b8">No analysis data available.</p>';
+    return;
+  }
+
+  const bound = a.acf_bound_95 ?? 0;
+  const acfAtS = Math.abs(a.acf_at_seasonal_lag ?? 0);
+  const ss = bound > 0 ? acfAtS / bound : 0;
+  const r1 = v.acf_score != null ? Math.abs(v.acf_score) : null;
+
+  const crit = [
+    {
+      name: 'Strong seasonal pattern',
+      pass: ss > 3,
+      value: `ACF(s) = ${acfAtS.toFixed(3)}  (${ss.toFixed(1)}× bound)`,
+    },
+    {
+      name: 'Non-stationarity (needs differencing)',
+      pass: r1 !== null && r1 > 0.6,
+      value: r1 !== null ? `r₁ = ${r1.toFixed(3)}` : 'N/A',
+    },
+    {
+      name: 'Stationarity proxy',
+      pass: v.stationarity !== null && v.stationarity < 0.5,
+      value: v.stationarity !== null ? `1 − |r₁| = ${v.stationarity.toFixed(3)}` : 'N/A',
+    },
+    {
+      name: 'ACF significant at seasonal lag',
+      pass: a.acf_significant === true,
+      value: a.acf_significant ? 'Yes' : 'No',
+    },
+    {
+      name: 'F-test: seasonal means differ',
+      pass: a.f_significant === true,
+      value: a.f_significant
+        ? `F = ${a.f_stat?.toFixed(2)}, p = ${a.f_p_value < 0.001 ? '< 0.001' : a.f_p_value?.toFixed(3)}`
+        : `F = ${a.f_stat?.toFixed(2)}, p = ${a.f_p_value?.toFixed(3)}`,
+    },
+    {
+      name: 'ARCH heteroscedasticity present',
+      pass: v.arch_stat !== null && v.arch_stat > 3.84,
+      value: v.arch_stat !== null ? `ARCH stat = ${v.arch_stat.toFixed(3)}` : 'N/A',
+    },
+  ];
+
+  $('dCriteria').innerHTML = crit.map(c =>
+    `<div class="criterion ${c.pass ? 'pass' : 'fail'}">
+      <span class="icon">${c.pass ? '✓' : '✗'}</span>
+      <span class="cname">${esc(c.name)}</span>
+      <span class="cval">${esc(c.value)}</span>
+    </div>`
+  ).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Charts
+// ─────────────────────────────────────────────────────────────────────────────
+function killCharts() {
+  Object.values(activeCharts).forEach(c => c.destroy());
+  activeCharts = {};
+}
+
+function mean(xs) { return xs.reduce((a, b) => a + b, 0) / xs.length; }
+
+function computeAcf(values, maxLag) {
+  const n = values.length, mu = mean(values);
+  const denom = values.reduce((s, x) => s + (x - mu) ** 2, 0);
+  if (denom === 0) return Array(maxLag).fill(0);
+  return Array.from({ length: maxLag }, (_, k) => {
+    let num = 0;
+    for (let t = k + 1; t < n; t++) num += (values[t] - mu) * (values[t - k - 1] - mu);
+    return num / denom;
+  });
+}
+
+function renderCharts(v, a) {
+  killCharts();
+
+  const td = a?.training_data   ?? v.latest_pts ?? [];
+  const vd = a?.validation_data ?? [];
+  const s  = a?.frequency ?? (v.frequency_code === 6 ? 12 : v.frequency_code === 9 ? 4 : 12);
+
+  const BLUE   = 'rgba(59,130,246,0.9)',  BLUE_F = 'rgba(59,130,246,0.12)';
+  const ORANGE = 'rgba(249,115,22,0.9)', RED    = 'rgba(239,68,68,0.85)';
+  const GREY   = 'rgba(100,116,139,0.55)';
+
+  // 1. Time series
+  if (td.length > 0) {
+    const all = [...td, ...vd];
+    activeCharts.ts = new Chart(document.getElementById('tsChart'), {
+      type: 'line',
+      data: {
+        labels: all.map(d => d.date),
+        datasets: [
+          { label: `Training (${td.length})`,
+            data: [...td.map(d => d.value), ...Array(vd.length).fill(null)],
+            borderColor: BLUE, backgroundColor: BLUE_F, borderWidth: 1.5,
+            pointRadius: 0, fill: true, tension: 0.3 },
+          { label: `Validation (${vd.length})`,
+            data: [...Array(td.length).fill(null), ...vd.map(d => d.value)],
+            borderColor: ORANGE, borderWidth: 2,
+            borderDash: [6, 3], pointRadius: 3, fill: false },
+        ],
+      },
+      options: {
+        animation: false,
+        plugins: { legend: { position: 'top' } },
+        scales: { x: { ticks: { maxTicksLimit: 20 } } },
+      },
+    });
+  }
+
+  // 2. ACF
+  if (td.length >= s * 2) {
+    const values  = td.map(d => d.value);
+    const acf     = computeAcf(values, 2 * s);
+    const bound   = a?.acf_bound_95 ?? (1.96 / Math.sqrt(values.length));
+    const acfCol  = acf.map((_, i) =>
+      (i === s - 1 || i === 2 * s - 1) ? RED
+        : Math.abs(acf[i]) > bound ? 'rgba(239,68,68,0.55)' : GREY);
+
+    activeCharts.acf = new Chart(document.getElementById('acfChart'), {
+      type: 'bar',
+      data: {
+        labels: acf.map((_, i) => i + 1),
+        datasets: [
+          { label: 'ACF', data: acf, backgroundColor: acfCol, borderWidth: 0 },
+          { data: Array(acf.length).fill(bound),  type: 'line', borderColor: RED,
+            borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, fill: false, label: '+95%' },
+          { data: Array(acf.length).fill(-bound), type: 'line', borderColor: RED,
+            borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, fill: false, label: '-95%' },
+        ],
+      },
+      options: {
+        animation: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { min: -1, max: 1, title: { display: true, text: 'r_k' } } },
+      },
+    });
+  }
+
+  // 3. Seasonal means
+  if (a?.training_data?.length >= s) {
+    const values = td.map(d => d.value);
+    const groups = Array.from({ length: s }, () => []);
+    for (const { date, value } of td) {
+      const m = parseInt((date.split('-')[1] ?? '1'), 10);
+      groups[(m - 1) % s].push(value);
+    }
+    const smeans = groups.map(g => g.length ? mean(g) : 0);
+    const gm     = mean(smeans);
+    const sLabels = s === 12
+      ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+      : ['Q1','Q2','Q3','Q4'];
+
+    activeCharts.sm = new Chart(document.getElementById('smChart'), {
+      type: 'bar',
+      data: {
+        labels: sLabels,
+        datasets: [
+          { label: 'Seasonal mean', data: smeans,
+            backgroundColor: smeans.map(v => v > gm ? BLUE : ORANGE),
+            borderWidth: 0 },
+          { data: Array(s).fill(gm), type: 'line', borderColor: '#64748b',
+            borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, fill: false, label: 'Grand mean' },
+        ],
+      },
+      options: {
+        animation: false,
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Export
+// ─────────────────────────────────────────────────────────────────────────────
+function exportCsv(v, a) {
+  const td = a?.training_data   ?? v.latest_pts ?? [];
+  const vd = a?.validation_data ?? [];
+  if (td.length === 0 && vd.length === 0) {
+    showExportStatus('No data available to export.', 'error');
+    return;
+  }
+
+  const header = 'date,value,split';
+  const rows   = [
+    ...td.map(d => `${d.date},${d.value},training`),
+    ...vd.map(d => `${d.date},${d.value},validation`),
+  ];
+  const csv = [header, ...rows].join('\n');
+  download(`cansim_v${v.vector_id}_${v.table_id ?? 'data'}.csv`, csv, 'text/csv');
+  showExportStatus(`Exported ${td.length + vd.length} observations as CSV.`, 'info');
+}
+
+function exportJson(v, a) {
+  const payload = {
+    vectorId:       v.vector_id,
+    tableId:        v.table_id,
+    seriesTitle:    v.series_title,
+    frequencyCode:  v.frequency_code,
+    startDate:      v.start_date,
+    endDate:        v.end_date,
+    analysis:       a ? {
+      verdict:         a.verdict,
+      complexityGrade: a.complexity_grade,
+      complexityScore: a.complexity_score,
+      modelHint:       a.model_hint,
+      acfAtSeasonalLag: a.acf_at_seasonal_lag,
+      acfBound95:      a.acf_bound_95,
+      fStat:           a.f_stat,
+      fPValue:         a.f_p_value,
+      analysedAt:      a.analysed_at,
+    } : null,
+    trainingData:   a?.training_data   ?? v.latest_pts ?? [],
+    validationData: a?.validation_data ?? [],
+  };
+  download(
+    `cansim_v${v.vector_id}_${v.table_id ?? 'data'}.json`,
+    JSON.stringify(payload, null, 2),
+    'application/json'
+  );
+  showExportStatus('Exported full analysis as JSON.', 'info');
+}
+
+function download(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function showExportStatus(msg, type) {
+  const el = $('exportStatus');
+  el.innerHTML = `<div class="status-msg ${type}">${esc(msg)}</div>`;
+  setTimeout(() => { el.innerHTML = ''; }, 4000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DB pill
+// ─────────────────────────────────────────────────────────────────────────────
+function setPill(state, text) {
+  const pill = $('dbPill');
+  pill.className = `connecting connected error`.split(' ').reduce((_, c) => '', '');
+  pill.className = `dbPill ${state}`;  // reset + set
+  $('dbPillText').textContent = text;
+  // Reapply correct class structure
+  pill.className = state;
+  pill.id = 'dbPill';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sort headers
+// ─────────────────────────────────────────────────────────────────────────────
+document.querySelectorAll('table.vtbl thead th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) {
+      sortDir = -sortDir;
+    } else {
+      sortCol = col;
+      sortDir = col === 'seriesTitle' || col === 'tableId' ? 1 : -1;
+    }
+    document.querySelectorAll('table.vtbl thead th').forEach(h => h.classList.remove('active'));
+    th.classList.add('active');
+    th.querySelector('.sort-icon').textContent = sortDir === -1 ? ' ↓' : ' ↑';
+    applyFilters();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter controls
+// ─────────────────────────────────────────────────────────────────────────────
+let searchTimer;
+$('searchInput').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(applyFilters, 250);
+});
+$('filterVerdict').addEventListener('change', applyFilters);
+$('filterFreq').addEventListener('change', applyFilters);
+$('filterGrade').addEventListener('change', applyFilters);
+$('resetBtn').addEventListener('click', () => {
+  $('searchInput').value     = '';
+  $('filterVerdict').value   = '';
+  $('filterFreq').value      = '';
+  $('filterGrade').value     = '';
+  applyFilters();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────────────────────
+loadVectors();
+</script>
+
+</body>
+</html>
