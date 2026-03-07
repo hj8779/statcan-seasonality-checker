@@ -858,13 +858,25 @@ function showExportStatus(msg, type) {
 // ─────────────────────────────────────────────────────────────────────────────
 // StatCan live fetch + full analysis
 // ─────────────────────────────────────────────────────────────────────────────
-const STATCAN_API = 'https://www150.statcan.gc.ca/t1/tbl1/en/dtbl';
+// Proxy endpoint (Supabase Edge Function) — avoids CORS when calling StatCan from browser
+const PROXY_URL = `${SUPABASE_URL}/functions/v1/statcan-proxy`;
 const N_TOTAL = 112, N_VAL = 12, N_TRAIN = 100;
 
-async function statcanFetch(path) {
-  const r = await fetch(STATCAN_API + path);
-  if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + path);
-  return r.json();
+async function fetchVectorData(vectorId, latestN) {
+  const r = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'apikey': SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ vectorId, latestN }),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    throw new Error(`Proxy error HTTP ${r.status}: ${txt}`);
+  }
+  return r.json();  // returns the StatCan array response
 }
 
 function processPoints(pts) {
@@ -999,7 +1011,7 @@ async function loadLiveAnalysis(v) {
   setLive('Fetching from Statistics Canada…', 'info');
 
   try {
-    const dataArr = await statcanFetch(`!getDataFromVectorAndLatestNPeriods/${v.vector_id}/112`);
+    const dataArr = await fetchVectorData(v.vector_id, 112);
     const dataItem = dataArr[0];
     if (dataItem?.status !== 'SUCCESS') throw new Error(`Vector ${v.vector_id} not found on StatCan`);
 
