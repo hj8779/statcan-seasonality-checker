@@ -120,12 +120,16 @@
     .status-msg.info  { background: #dbeafe; color: #1e3a8a; }
     .status-msg.error { background: #fee2e2; color: #991b1b; }
     /* ── Pagination ── */
-    .pagination { display: flex; gap: .4rem; align-items: center; margin-top: .75rem; }
-    .pagination button { padding: .3rem .65rem; border-radius: .35rem; border: 1px solid #e2e8f0;
-                         background: #fff; cursor: pointer; font-size: .8rem; color: #475569; }
+    .pagination { display: flex; gap: .3rem; align-items: center; margin-top: .75rem; flex-wrap: nowrap; overflow-x: auto; }
+    .pagination button { padding: .3rem .6rem; border-radius: .35rem; border: 1px solid #e2e8f0;
+                         background: #fff; cursor: pointer; font-size: .8rem; color: #475569; white-space: nowrap; flex-shrink: 0; }
     .pagination button:disabled { opacity: .4; cursor: default; }
     .pagination button.active { background: #1e40af; color: #fff; border-color: #1e40af; }
-    .pagination .page-info { font-size: .8rem; color: #64748b; margin: 0 .4rem; }
+    .pagination .page-info { font-size: .8rem; color: #64748b; margin: 0 .3rem; white-space: nowrap; flex-shrink: 0; }
+    /* ── Column drag ── */
+    table.vtbl thead th[draggable] { cursor: grab; }
+    table.vtbl thead th[draggable]:active { cursor: grabbing; }
+    table.vtbl thead th.drag-over { background: #dbeafe; border-left: 2px solid #1e40af; }
     @media (max-width: 768px) {
       .chart-row { grid-template-columns: 1fr; }
       input[type=search] { width: 100%; }
@@ -174,19 +178,7 @@
   <!-- Table -->
   <div class="tbl-wrap">
     <table class="vtbl">
-      <thead>
-        <tr>
-          <th data-col="vectorId">Vector ID <span class="sort-icon">&#8597;</span></th>
-          <th data-col="tableId">Table ID <span class="sort-icon">&#8597;</span></th>
-          <th data-col="seriesTitle">Series Title <span class="sort-icon">&#8597;</span></th>
-          <th data-col="frequencyCode">Freq <span class="sort-icon">&#8597;</span></th>
-          <th data-col="acfScore">ACF(s) <span class="sort-icon">&#8597;</span></th>
-          <th data-col="complexityScore">Grade <span class="sort-icon">&#8597;</span></th>
-          <th data-col="verdict">Verdict <span class="sort-icon">&#8597;</span></th>
-          <th data-col="stationarity">Stationarity <span class="sort-icon">&#8597;</span></th>
-          <th data-col="scannedAt">Scanned <span class="sort-icon">&#8597;</span></th>
-        </tr>
-      </thead>
+      <thead><tr id="headerRow"></tr></thead>
       <tbody id="vectorsTbody">
         <tr><td colspan="9" class="tbl-placeholder">Loading vectors from database…</td></tr>
       </tbody>
@@ -299,6 +291,21 @@ let page         = 0;
 const PAGE_SIZE  = 30;
 let selectedId   = null; // selected vectorId
 let activeCharts = {};
+
+// ── Column order (drag-to-reorder) ───────────────────────────────────────────
+const COLUMNS = [
+  { key: 'vectorId',        label: 'Vector ID' },
+  { key: 'tableId',         label: 'Table ID' },
+  { key: 'seriesTitle',     label: 'Series Title' },
+  { key: 'frequencyCode',   label: 'Freq' },
+  { key: 'acfScore',        label: 'ACF(s)' },
+  { key: 'complexityScore', label: 'Grade' },
+  { key: 'verdict',         label: 'Verdict' },
+  { key: 'stationarity',    label: 'Stationarity' },
+  { key: 'scannedAt',       label: 'Scanned' },
+];
+let colOrder   = COLUMNS.map(c => c.key);
+let dragSrcIdx = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOM helpers
@@ -442,43 +449,88 @@ function fmtDate(s) {
   return new Date(s).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function renderTable() {
-  const start = page * PAGE_SIZE;
-  const pageRows = filtered.slice(start, start + PAGE_SIZE);
+// ── Dynamic header rendering + drag-to-reorder ───────────────────────────────
+function renderHeaders() {
+  const tr = $('headerRow');
+  tr.innerHTML = colOrder.map((key, idx) => {
+    const col    = COLUMNS.find(c => c.key === key);
+    const active = sortCol === key;
+    const icon   = active ? (sortDir === -1 ? ' ↓' : ' ↑') : ' ↕';
+    return `<th data-col="${key}" data-idx="${idx}" draggable="true" class="${active ? 'active' : ''}">
+      ${col.label}<span class="sort-icon">${icon}</span>
+    </th>`;
+  }).join('');
 
+  tr.querySelectorAll('th').forEach(th => {
+    const idx = parseInt(th.dataset.idx, 10);
+
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (sortCol === col) { sortDir = -sortDir; }
+      else { sortCol = col; sortDir = col === 'seriesTitle' || col === 'tableId' ? 1 : -1; }
+      applyFilters();
+    });
+
+    th.addEventListener('dragstart', e => {
+      dragSrcIdx = idx;
+      th.style.opacity = '0.45';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    th.addEventListener('dragend',  () => { th.style.opacity = ''; });
+    th.addEventListener('dragover', e => { e.preventDefault(); th.classList.add('drag-over'); });
+    th.addEventListener('dragleave',() => th.classList.remove('drag-over'));
+    th.addEventListener('drop', e => {
+      e.preventDefault();
+      th.classList.remove('drag-over');
+      const tgt = parseInt(th.dataset.idx, 10);
+      if (dragSrcIdx === null || dragSrcIdx === tgt) return;
+      const next = [...colOrder];
+      next.splice(tgt, 0, next.splice(dragSrcIdx, 1)[0]);
+      colOrder = next;
+      dragSrcIdx = null;
+      renderHeaders();
+      renderTable();
+    });
+  });
+}
+
+function renderCell(v, key) {
+  const a = v._analysis;
+  switch (key) {
+    case 'vectorId':        return `<td>${esc(v.vector_id)}</td>`;
+    case 'tableId':         return `<td><code style="font-size:.78rem">${esc(v.table_id)}</code></td>`;
+    case 'seriesTitle':     return `<td class="td-title" title="${esc(v.series_title)}">${esc(v.series_title ?? '—')}</td>`;
+    case 'frequencyCode':   return `<td>${esc(FREQ_LABEL[v.frequency_code] ?? v.frequency_code)}</td>`;
+    case 'acfScore':        return `<td>${acfBar(v.acf_score)}</td>`;
+    case 'complexityScore': return `<td>${gradeChip(a?.complexity_grade)}</td>`;
+    case 'verdict':         return `<td>${verdictChip(a?.verdict)}</td>`;
+    case 'stationarity':    return `<td>${v.stationarity != null ? v.stationarity.toFixed(3) : '—'}</td>`;
+    case 'scannedAt':       return `<td style="white-space:nowrap">${fmtDate(v.scanned_at)}</td>`;
+    default:                return '<td>—</td>';
+  }
+}
+
+function renderTable() {
+  renderHeaders();
+
+  const start    = page * PAGE_SIZE;
+  const pageRows = filtered.slice(start, start + PAGE_SIZE);
   $('countBadge').textContent = `${filtered.length} vector${filtered.length !== 1 ? 's' : ''} shown`;
 
   if (pageRows.length === 0) {
     $('vectorsTbody').innerHTML =
-      `<tr><td colspan="9" class="tbl-placeholder">No vectors match the current filters.</td></tr>`;
+      `<tr><td colspan="${colOrder.length}" class="tbl-placeholder">No vectors match the current filters.</td></tr>`;
     renderPagination();
     return;
   }
 
-  const rows = pageRows.map(v => {
-    const a   = v._analysis;
+  $('vectorsTbody').innerHTML = pageRows.map(v => {
     const sel = v.vector_id === selectedId ? ' selected' : '';
-    return `<tr class="${sel}" data-vid="${v.vector_id}">
-      <td>${esc(v.vector_id)}</td>
-      <td><code style="font-size:.78rem">${esc(v.table_id)}</code></td>
-      <td class="td-title" title="${esc(v.series_title)}">${esc(v.series_title ?? '—')}</td>
-      <td>${esc(FREQ_LABEL[v.frequency_code] ?? v.frequency_code)}</td>
-      <td>${acfBar(v.acf_score)}</td>
-      <td>${gradeChip(a?.complexity_grade)}</td>
-      <td>${verdictChip(a?.verdict)}</td>
-      <td>${v.stationarity !== null && v.stationarity !== undefined ? v.stationarity.toFixed(3) : '—'}</td>
-      <td style="white-space:nowrap">${fmtDate(v.scanned_at)}</td>
-    </tr>`;
-  });
+    return `<tr class="${sel}" data-vid="${v.vector_id}">${colOrder.map(k => renderCell(v, k)).join('')}</tr>`;
+  }).join('');
 
-  $('vectorsTbody').innerHTML = rows.join('');
-
-  // Row click
   $('vectorsTbody').querySelectorAll('tr[data-vid]').forEach(tr => {
-    tr.addEventListener('click', () => {
-      const vid = parseInt(tr.dataset.vid, 10);
-      selectVector(vid);
-    });
+    tr.addEventListener('click', () => selectVector(parseInt(tr.dataset.vid, 10)));
   });
 
   renderPagination();
@@ -489,19 +541,21 @@ function renderPagination() {
   const bar = $('paginationBar');
   if (totalPages <= 1) { bar.innerHTML = ''; return; }
 
+  const WIN      = 10;
+  const winStart = Math.floor(page / WIN) * WIN;
+  const winEnd   = Math.min(winStart + WIN, totalPages);
+
   let html = `<button ${page === 0 ? 'disabled' : ''} data-go="${page - 1}">&larr;</button>`;
-  for (let i = 0; i < totalPages; i++) {
+  if (winStart > 0)       html += `<button data-go="${winStart - WIN}">&laquo;</button>`;
+  for (let i = winStart; i < winEnd; i++)
     html += `<button class="${i === page ? 'active' : ''}" data-go="${i}">${i + 1}</button>`;
-  }
+  if (winEnd < totalPages) html += `<button data-go="${winEnd}">&raquo;</button>`;
   html += `<button ${page === totalPages - 1 ? 'disabled' : ''} data-go="${page + 1}">&rarr;</button>`;
-  html += `<span class="page-info">Page ${page + 1} / ${totalPages}</span>`;
+  html += `<span class="page-info">${page + 1} / ${totalPages}</span>`;
   bar.innerHTML = html;
 
   bar.querySelectorAll('button[data-go]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      page = parseInt(btn.dataset.go, 10);
-      renderTable();
-    });
+    btn.addEventListener('click', () => { page = parseInt(btn.dataset.go, 10); renderTable(); });
   });
 }
 
@@ -1138,24 +1192,7 @@ function setPill(state, text) {
   pill.id = 'dbPill';
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sort headers
-// ─────────────────────────────────────────────────────────────────────────────
-document.querySelectorAll('table.vtbl thead th[data-col]').forEach(th => {
-  th.addEventListener('click', () => {
-    const col = th.dataset.col;
-    if (sortCol === col) {
-      sortDir = -sortDir;
-    } else {
-      sortCol = col;
-      sortDir = col === 'seriesTitle' || col === 'tableId' ? 1 : -1;
-    }
-    document.querySelectorAll('table.vtbl thead th').forEach(h => h.classList.remove('active'));
-    th.classList.add('active');
-    th.querySelector('.sort-icon').textContent = sortDir === -1 ? ' ↓' : ' ↑';
-    applyFilters();
-  });
-});
+// (sort listeners are set up inside renderHeaders, called from renderTable)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Filter controls
