@@ -28,6 +28,7 @@ import { Effect, Duration, Schedule } from "effect"
 import { asc, eq, inArray }          from "drizzle-orm"
 
 import { HttpClientLive }            from "../cansim/httpClient.js"
+import { ApiResponseError }          from "../cansim/errors.js"
 import { Db, DbLive, dbQuery }       from "../db/client.js"
 import { scanTasks }                 from "../db/schema.js"
 import { scanVectorId }              from "./scanner.js"
@@ -73,6 +74,14 @@ const markError = (id: number, msg: string) =>
       .where(eq(scanTasks.id, id))
   )
 
+/** Permanent failures (e.g. too few observations) — never retried automatically. */
+const markSkipped = (id: number, msg: string) =>
+  dbQuery((db) =>
+    db.update(scanTasks)
+      .set({ status: "skipped", doneAt: new Date(), errorMsg: msg.slice(0, 400) })
+      .where(eq(scanTasks.id, id))
+  )
+
 // ── Poll cycle ────────────────────────────────────────────────────────────────
 
 /**
@@ -99,6 +108,12 @@ const pollCycle = Effect.gen(function* () {
       Effect.andThen(markDone(task.id)),
       Effect.catchAll((e) => {
         const msg = String(e)
+        const isPermanent =
+          e instanceof ApiResponseError && e.message.startsWith("Too few observations")
+        if (isPermanent) {
+          console.error(`[worker] v${task.vectorId} skipped: ${msg}`)
+          return markSkipped(task.id, msg)
+        }
         console.error(`[worker] v${task.vectorId} failed: ${msg}`)
         return markError(task.id, msg)
       })
