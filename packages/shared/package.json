@@ -1,0 +1,10 @@
+{
+  "name": "@statcan/shared",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./db": "./src/db/schema.ts",
+    "./db/client": "./src/db/client.ts"
+  }
+}

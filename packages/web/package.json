@@ -1,0 +1,28 @@
+{
+  "name": "@statcan/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@statcan/shared": "*",
+    "@reduxjs/toolkit": "*",
+    "@supabase/supabase-js": "*",
+    "chart.js": "*",
+    "react": "*",
+    "react-chartjs-2": "*",
+    "react-dom": "*",
+    "react-redux": "*"
+  },
+  "devDependencies": {
+    "@types/react": "*",
+    "@types/react-dom": "*",
+    "@vitejs/plugin-react": "*",
+    "typescript": "*",
+    "vite": "*"
+  }
+}

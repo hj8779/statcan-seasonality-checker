@@ -1,0 +1,22 @@
+{
+  "name": "@statcan/scanner",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "scan": "tsx src/scanner/index.ts",
+    "worker": "tsx src/scanner/worker.ts",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@statcan/shared": "*",
+    "dotenv": "*",
+    "drizzle-orm": "*",
+    "effect": "*",
+    "postgres": "*"
+  },
+  "devDependencies": {
+    "@types/node": "*",
+    "tsx": "*",
+    "typescript": "*"
+  }
+}

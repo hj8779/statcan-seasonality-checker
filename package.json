@@ -1,0 +1,24 @@
+{
+  "name": "statcan-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "scan": "npm run scan -w @statcan/scanner",
+    "worker": "npm run worker -w @statcan/scanner",
+    "build": "npm run build -w @statcan/web",
+    "dev": "npm run dev -w @statcan/web",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "devDependencies": {
+    "drizzle-kit": "*",
+    "tsx": "*",
+    "typescript": "*",
+    "@types/node": "*"
+  }
+}
