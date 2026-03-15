@@ -7,9 +7,10 @@ Analyser for timeseries vectors on StatCan
 npm install
 
 ```
-#.env.example
-# Supabase Transaction Pooler
+
+# Supabase Transaction Pooler (.env example)
 ```
+
 DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 DB_POOL_SIZE=10
 ```
