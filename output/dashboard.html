@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CANSIM SARIMA Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            padding: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto
+        }
+
+        header {
+            margin-bottom: 1.5rem
+        }
+
+        header h1 {
+            font-size: 1.4rem;
+            font-weight: 700
+        }
+
+        header p {
+            color: #64748b;
+            font-size: .9rem;
+            margin-top: .25rem
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: .75rem;
+            padding: 1.25rem;
+            margin-bottom: 1.25rem
+        }
+
+        .chart-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+            margin-bottom: 1.25rem
+        }
+
+        .chart-title {
+            font-size: .8rem;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            margin-bottom: .75rem
+        }
+
+        canvas {
+            max-height: 260px
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: .5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap
+        }
+
+        .tab {
+            padding: .4rem .9rem;
+            border-radius: .5rem;
+            border: 1px solid #e2e8f0;
+            background: #f1f5f9;
+            cursor: pointer;
+            font-size: .875rem;
+            font-weight: 500;
+            color: #475569
+        }
+
+        .tab.active {
+            background: #1e40af;
+            color: #fff;
+            border-color: #1e40af
+        }
+
+        /* .tab-content {} */
+
+        .row {
+            display: flex;
+            gap: .75rem;
+            align-items: center;
+            flex-wrap: wrap
+        }
+
+        input[type=number],
+        input[type=text],
+        input:not([type]),
+        textarea {
+            padding: .5rem .75rem;
+            border: 1px solid #cbd5e1;
+            border-radius: .5rem;
+            font-size: .9rem
+        }
+
+        input[type=number],
+        input[type=text],
+        input:not([type]) {
+            width: 18rem
+        }
+
+        .btn-primary {
+            padding: .5rem 1.1rem;
+            background: #1e40af;
+            color: #fff;
+            border: none;
+            border-radius: .5rem;
+            cursor: pointer;
+            font-size: .875rem;
+            font-weight: 600;
+            white-space: nowrap
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8
+        }
+
+        .btn-primary:disabled {
+            opacity: .45;
+            cursor: not-allowed
+        }
+
+        .btn-danger {
+            padding: .5rem 1.1rem;
+            background: #dc2626;
+            color: #fff;
+            border: none;
+            border-radius: .5rem;
+            cursor: pointer;
+            font-size: .875rem;
+            font-weight: 600;
+            white-space: nowrap
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c
+        }
+
+        .hint {
+            font-size: .8rem;
+            color: #94a3b8;
+            margin-top: .5rem
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: .1rem .3rem;
+            border-radius: .25rem;
+            font-size: .8rem
+        }
+
+        .status {
+            margin-top: .75rem;
+            padding: .5rem .75rem;
+            border-radius: .5rem;
+            font-size: .875rem
+        }
+
+        .status.info {
+            background: #dbeafe;
+            color: #1e3a8a
+        }
+
+        .status.success {
+            background: #dcfce7;
+            color: #166534
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b
+        }
+
+        /* Series info */
+        .info-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem
+        }
+
+        .series-title {
+            font-weight: 700;
+            font-size: 1rem;
+            margin-bottom: .25rem
+        }
+
+        .series-details {
+            font-size: .8rem;
+            color: #64748b
+        }
+
+        .grade-box {
+            text-align: center;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: .5rem;
+            padding: .6rem 1rem;
+            min-width: 160px
+        }
+
+        .grade-label {
+            font-size: .7rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: .04em
+        }
+
+        .grade-value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin: .15rem 0
+        }
+
+        .grade-sub {
+            font-size: .75rem;
+            color: #64748b
+        }
+
+        .model-hint {
+            font-size: .85rem;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: .4rem;
+            padding: .5rem .75rem;
+            margin-bottom: .75rem;
+            color: #78350f
+        }
+
+        .criteria-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: .5rem
+        }
+
+        .criterion {
+            display: grid;
+            grid-template-columns: 1.2rem 1fr;
+            grid-template-rows: auto auto;
+            column-gap: .4rem;
+            padding: .5rem .6rem;
+            border-radius: .4rem;
+            font-size: .82rem
+        }
+
+        .criterion.pass {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0
+        }
+
+        .criterion.fail {
+            background: #fff1f2;
+            border: 1px solid #fecdd3
+        }
+
+        .criterion .icon {
+            font-size: 1rem;
+            grid-row: 1/3;
+            align-self: center
+        }
+
+        .criterion.pass .icon {
+            color: #16a34a
+        }
+
+        .criterion.fail .icon {
+            color: #dc2626
+        }
+
+        .cname {
+            font-weight: 600;
+            color: #374151
+        }
+
+        .cval {
+            color: #6b7280;
+            font-size: .78rem
+        }
+
+        .chint {
+            grid-column: 2/3;
+            color: #9ca3af;
+            font-style: italic;
+            font-size: .78rem
+        }
+
+        /* Analysis panel */
+        .verdict-box {
+            border-radius: .4rem;
+            padding: .75rem;
+            border: 1px solid
+        }
+
+        .verdict-tag {
+            font-weight: 800;
+            font-size: 1.1rem;
+            letter-spacing: .04em;
+            margin-bottom: .4rem
+        }
+
+        .stat-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .82rem;
+            margin-top: .4rem
+        }
+
+        .stat-table th {
+            color: #94a3b8;
+            font-weight: 500;
+            padding: .25rem .4rem
+        }
+
+        .stat-table td {
+            font-weight: 600;
+            padding: .25rem .4rem
+        }
+
+        /* Supabase DB browser */
+        .sb-config {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: .5rem;
+            padding: .75rem;
+            margin-bottom: .75rem
+        }
+
+        .sb-status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: .35rem;
+            vertical-align: middle
+        }
+
+        .sb-status-dot.ok {
+            background: #16a34a
+        }
+
+        .sb-status-dot.err {
+            background: #dc2626
+        }
+
+        .sb-status-dot.idle {
+            background: #94a3b8
+        }
+
+        .v-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: .6rem;
+            padding: .9rem;
+            cursor: pointer;
+            transition: border-color .15s, box-shadow .15s
+        }
+
+        .v-card:hover {
+            border-color: #93c5fd;
+            box-shadow: 0 1px 8px rgba(59, 130, 246, .12)
+        }
+
+        .v-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+            gap: .75rem;
+            margin-top: .5rem
+        }
+
+        .acf-bar-wrap {
+            margin-top: .45rem
+        }
+
+        .acf-bar-track {
+            background: #e2e8f0;
+            border-radius: 3px;
+            height: 6px;
+            width: 100%;
+            overflow: hidden
+        }
+
+        .acf-bar-fill {
+            height: 6px;
+            border-radius: 3px
+        }
+
+        .filter-row {
+            display: flex;
+            gap: .5rem;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: .5rem
+        }
+
+        .filter-row select,
+        .filter-row input[type=text],
+        .filter-row input[type=number] {
+            width: auto;
+            padding: .4rem .6rem;
+            font-size: .85rem
+        }
+
+        .filter-row label {
+            font-size: .82rem;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            gap: .3rem;
+            cursor: pointer
+        }
+
+        /* Scanner */
+        .scanner-log {
+            background: #0f172a;
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: .78rem;
+            padding: .75rem;
+            border-radius: .5rem;
+            height: 260px;
+            overflow-y: auto;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all
+        }
+
+        .scanner-log .ok {
+            color: #4ade80
+        }
+
+        .scanner-log .err {
+            color: #f87171
+        }
+
+        .scanner-log .info {
+            color: #60a5fa
+        }
+
+        .progress-bar-track {
+            background: #e2e8f0;
+            border-radius: 4px;
+            height: 10px;
+            margin: .5rem 0
+        }
+
+        .progress-bar-fill {
+            background: #1e40af;
+            height: 10px;
+            border-radius: 4px;
+            transition: width .3s
+        }
+
+        .stat-chips {
+            display: flex;
+            gap: .35rem;
+            flex-wrap: wrap;
+            margin-top: .4rem
+        }
+
+        .chip {
+            font-size: .7rem;
+            padding: .15rem .45rem;
+            border-radius: 3px;
+            background: #f1f5f9;
+            color: #475569;
+            font-weight: 500
+        }
+
+        .chip.green {
+            background: #dcfce7;
+            color: #166534
+        }
+
+        .chip.yellow {
+            background: #fef9c3;
+            color: #713f12
+        }
+
+        .chip.red {
+            background: #fee2e2;
+            color: #991b1b
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>CANSIM Dataset Finder &amp; SARIMA Complexity Analyzer</h1>
+        <p>Find seasonal series with complex ARIMA structure suitable for assignment 4</p>
+    </header>
+
+    <!-- ── Search panel ──────────────────────────────────────────────────────── -->
+    <div class="card" id="searchCard">
+        <div class="tab-bar">
+            <button class="tab active" data-tab="tabVector">By Vector ID</button>
+            <button class="tab" data-tab="tabTable">Browse Supabase DB</button>
+            <button class="tab" data-tab="tabScan">Scanner</button>
+        </div>
+
+        <!-- ── Tab 1: vector ID ──────────────────────────────────────────────── -->
+        <div id="tabVector" class="tab-content">
+            <div class="row">
+                <input id="vectorInput" type="number" placeholder="Vector ID  e.g. 2062810" />
+                <button id="loadVectorBtn" class="btn-primary">Load &amp; Analyze</button>
+            </div>
+            <p class="hint">Find the Vector ID on the Statistics Canada table page
+                (look for <code>v&lt;number&gt;</code> next to each series).</p>
+        </div>
+
+        <!-- ── Tab 2: Supabase DB browser ───────────────────────────────────── -->
+        <div id="tabTable" class="tab-content" hidden>
+            <div class="sb-config">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+                    <span style="font-size:.8rem;font-weight:600;color:#475569">Supabase Connection</span>
+                    <span id="sbDot" class="sb-status-dot idle"></span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;align-items:center">
+                    <input id="sbUrl" type="text" placeholder="https://xxxx.supabase.co" />
+                    <input id="sbKey" type="text" placeholder="anon or service_role key" />
+                    <button id="sbConnectBtn" class="btn-primary">Connect</button>
+                </div>
+                <p class="hint" style="margin-top:.4rem">
+                    Supabase Dashboard → Settings → API.
+                    For scanner writes use the <code>service_role</code> key (or
+                    <code>GRANT INSERT, UPDATE ON TABLE public.vectors TO anon</code>).
+                </p>
+            </div>
+
+            <div id="sbFilters" hidden>
+                <div class="filter-row">
+                    <input id="tableFilter" type="text" placeholder="Table ID prefix  e.g. 14-10" style="width:200px" />
+                    <select id="freqFilter">
+                        <option value="">All frequencies</option>
+                        <option value="6">Monthly (s=12)</option>
+                        <option value="9">Quarterly (s=4)</option>
+                    </select>
+                    <label>
+                        <input type="checkbox" id="scannedFilter" checked />
+                        Scanned only
+                    </label>
+                    <button id="searchVectorsBtn" class="btn-primary">Search</button>
+                </div>
+                <div class="filter-row">
+                    <label>Min |ACF|:
+                        <span id="acfSliderVal" style="font-weight:600;color:#1e40af;margin-left:.2rem">0.30</span>
+                    </label>
+                    <input id="acfSlider" type="range" min="0" max="100" value="30"
+                        style="width:130px;accent-color:#1e40af" />
+                    <label style="margin-left:.5rem">Per page:</label>
+                    <select id="pageSizeSelect">
+                        <option value="12">12</option>
+                        <option value="24" selected>24</option>
+                        <option value="48">48</option>
+                    </select>
+                </div>
+                <div id="vectorList"></div>
+                <div id="paginationRow" class="row" style="justify-content:center;margin-top:.75rem" hidden></div>
+            </div>
+        </div>
+
+        <!-- ── Tab 3: Scanner ────────────────────────────────────────────────── -->
+        <div id="tabScan" class="tab-content" hidden>
+            <p class="hint" style="margin-bottom:.75rem;color:#64748b;font-size:.85rem">
+                Fetches data from StatCan WDS, computes metadata, and upserts to Supabase.
+                Uses the Supabase connection from the Browse DB tab.
+            </p>
+
+            <!-- Mode selector -->
+            <div class="row" style="margin-bottom:.75rem;gap:1.25rem">
+                <span style="font-size:.85rem;font-weight:600;color:#475569">Mode:</span>
+                <label style="font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:.35rem">
+                    <input type="radio" name="scanMode" value="manual" id="scanModeManual" checked />
+                    Manual &mdash; enter vector IDs
+                </label>
+                <label style="font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:.35rem">
+                    <input type="radio" name="scanMode" value="auto" id="scanModeAuto" />
+                    Auto-Discover &mdash; probe &amp; queue to local worker
+                </label>
+            </div>
+
+            <!-- Manual mode panel -->
+            <div id="scanManualPanel" style="margin-bottom:.75rem">
+                <label style="font-size:.8rem;font-weight:600;color:#475569;display:block;margin-bottom:.3rem">
+                    Vector IDs to scan (one per line or comma-separated):
+                </label>
+                <textarea id="scanVectorIds" rows="4" style="width:100%;font-family:monospace;font-size:.82rem"
+                    placeholder="2062810&#10;1234567&#10;or paste a comma-separated list..."></textarea>
+            </div>
+
+            <!-- Auto-discover panel -->
+            <div id="scanAutoPanel" style="margin-bottom:.75rem" hidden>
+                <p class="hint" style="margin-bottom:.5rem">
+                    <strong>How it works:</strong>
+                    The browser probes vector IDs in batches of 200 via
+                    <code>getSeriesInfoFromVector</code> (CORS-safe) and queues valid series
+                    into Supabase <code>scan_tasks</code>.
+                    The local Node.js worker then picks them up, fetches full data (no CORS
+                    restriction), computes metadata, and saves to <code>vectors</code>.
+                    Run the worker in a VS Code terminal:
+                    <code style="display:block;margin:.3rem 0 0;font-size:.8rem">npm run worker</code>
+                </p>
+                <div class="row" style="margin-bottom:.5rem;gap:.75rem;align-items:center;flex-wrap:wrap">
+                    <label style="font-size:.82rem;color:#64748b">Start&nbsp;v:</label>
+                    <input id="autoStartId" type="number" min="1" step="1" value="1000000" style="width:9rem" />
+                    <label style="font-size:.82rem;color:#64748b">End&nbsp;v:</label>
+                    <input id="autoEndId" type="number" min="1" step="1" value="9000000" style="width:9rem" />
+                </div>
+                <div class="row" style="margin-bottom:.35rem;gap:.75rem;flex-wrap:wrap">
+                    <label style="font-size:.82rem;color:#64748b;display:flex;align-items:center;gap:.3rem">
+                        <input type="checkbox" id="autoSeasonalOnly" checked />
+                        Monthly &amp; Quarterly only
+                    </label>
+                    <button id="resetAutoBtn"
+                        style="padding:.3rem .65rem;font-size:.78rem;background:#fff;border:1px solid #cbd5e1;border-radius:.4rem;cursor:pointer;color:#475569;margin-left:auto"
+                        title="Erase saved probe progress and restart from Start v">Reset probe progress</button>
+                </div>
+                <div id="autoProgressInfo"
+                    style="font-size:.78rem;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.35rem .6rem;margin-top:.3rem"
+                    hidden></div>
+
+                <!-- Worker queue status -->
+                <div id="queueStatus"
+                    style="margin-top:.5rem;padding:.5rem .75rem;border-radius:.4rem;border:1px solid #e2e8f0;background:#f8fafc;font-size:.8rem"
+                    hidden>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+                        <span style="font-weight:600;color:#475569">Worker Queue (scan_tasks)</span>
+                        <button id="queueRefreshBtn"
+                            style="padding:.15rem .5rem;font-size:.75rem;background:#fff;border:1px solid #cbd5e1;border-radius:.3rem;cursor:pointer">↻
+                            Refresh</button>
+                    </div>
+                    <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
+                        <span>Pending: <strong id="qPending" style="color:#92400e">—</strong></span>
+                        <span>Processing: <strong id="qProcessing" style="color:#1e40af">—</strong></span>
+                        <span>Done: <strong id="qDone" style="color:#166534">—</strong></span>
+                        <span>Error: <strong id="qError" style="color:#991b1b">—</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rate + toggle -->
+            <div class="row" style="margin-bottom:.75rem">
+                <label style="font-size:.85rem;color:#64748b">Rate (req/s):</label>
+                <input id="scanRate" type="number" min="0.5" max="10" step="0.5" value="2" style="width:5rem" />
+                <button id="scanToggleBtn" class="btn-primary">Start Scanner</button>
+                <span id="scanStatusChip" style="font-size:.8rem;color:#94a3b8"></span>
+            </div>
+
+            <!-- Progress -->
+            <div id="scanProgressWrap" hidden>
+                <div
+                    style="display:flex;justify-content:space-between;font-size:.8rem;color:#64748b;margin-bottom:.2rem">
+                    <span id="scanProgressLabel">Scanning…</span>
+                    <span id="scanProgressCount"></span>
+                </div>
+                <div class="progress-bar-track">
+                    <div id="scanProgressBar" class="progress-bar-fill" style="width:0%"></div>
+                </div>
+                <div style="font-size:.78rem;color:#64748b;margin-top:.2rem">
+                    <span id="scanSuccessCount" style="color:#16a34a">✓ 0</span>
+                    &nbsp;·&nbsp;
+                    <span id="scanFailCount" style="color:#dc2626">✗ 0</span>
+                </div>
+            </div>
+
+            <!-- Log -->
+            <div class="scanner-log" id="scanLog">Waiting to start…</div>
+        </div>
+
+        <!-- Status bar (shared) -->
+        <div id="status" class="status" hidden></div>
+    </div>
+
+    <!-- ── Series info + complexity ──────────────────────────────────────────── -->
+    <div id="seriesInfoBox" class="card" hidden>
+        <div class="info-header">
+            <div>
+                <div id="seriesTitle" class="series-title"></div>
+                <div id="seriesDetails" class="series-details"></div>
+            </div>
+            <div id="gradeBox" class="grade-box">
+                <div class="grade-label">Assignment suitability</div>
+                <div id="complexityGrade" class="grade-value"></div>
+                <div id="complexityScore" class="grade-sub"></div>
+            </div>
+        </div>
+        <div id="complexityModel" class="model-hint"></div>
+        <div id="complexityCriteria" class="criteria-grid"></div>
+    </div>
+
+    <!-- ── Report box ────────────────────────────────────────────────────────── -->
+    <div id="reportBox" hidden>
+        <div class="card">
+            <h3 class="chart-title">Time Series (training = blue · validation = orange)</h3>
+            <canvas id="tsChart"></canvas>
+        </div>
+        <div class="chart-row">
+            <div class="card">
+                <h3 class="chart-title">ACF (red bars = seasonal lags)</h3>
+                <canvas id="acfChart"></canvas>
+            </div>
+            <div class="card">
+                <h3 class="chart-title">PACF (green bars = significant)</h3>
+                <canvas id="pacfChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-row">
+            <div class="card">
+                <h3 class="chart-title">Seasonal Means</h3>
+                <canvas id="smChart"></canvas>
+            </div>
+            <div class="card" id="analysisPanel">
+                <h3 class="chart-title">Seasonality Tests</h3>
+                <div id="seasonalityVerdict" class="verdict-box">
+                    <div id="verdictLabel" class="verdict-tag"></div>
+                    <table class="stat-table">
+                        <tr>
+                            <th>ACF r<sub id="lagLabel">s</sub></th>
+                            <td id="acfStat"></td>
+                            <th>95% bound</th>
+                            <td id="acfBound"></td>
+                        </tr>
+                        <tr>
+                            <th>F statistic</th>
+                            <td id="fStat"></td>
+                            <th>p-value</th>
+                            <td id="fPval"></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        'use strict';
+
+        // ── WDS API (POST-based, v2) ───────────────────────────────────────────────
+        const WDS = 'https://www150.statcan.gc.ca/t1/wds/rest';
+        const N_TOTAL = 112, N_VALIDATION = 12, N_TRAINING = 100;
+
+        async function wdsPost(endpoint, body) {
+            const r = await fetch(`${WDS}/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!r.ok) throw new Error(`HTTP ${r.status} (${r.statusText}) for ${endpoint}`);
+            return r.json();
+        }
+
+        const fetchSeriesInfo = v => wdsPost('getSeriesInfoFromVector', [{ vectorId: v }]);
+        const fetchVectorData = v => wdsPost('getDataFromVectorsAndLatestNPeriods', [{ vectorId: v, latestN: N_TOTAL }]);
+        const fetchVectorN = (v, n) => wdsPost('getDataFromVectorsAndLatestNPeriods', [{ vectorId: v, latestN: n }]);
+
+        // ── Math helpers ───────────────────────────────────────────────────────────
+        function mean(xs) { return xs.reduce((a, b) => a + b, 0) / xs.length; }
+
+        function computeAcf(values, maxLag) {
+            const n = values.length, mu = mean(values);
+            const denom = values.reduce((s, x) => s + (x - mu) ** 2, 0);
+            if (denom === 0) return Array(maxLag).fill(0);
+            return Array.from({ length: maxLag }, (_, k) => {
+                let num = 0;
+                for (let t = k + 1; t < n; t++) num += (values[t] - mu) * (values[t - k - 1] - mu);
+                return num / denom;
+            });
+        }
+
+        function computePacf(acfArr) {
+            const n = acfArr.length;
+            if (n === 0) return [];
+            const getR = j => j === 0 ? 1 : (acfArr[j - 1] ?? 0);
+            const pacf = [acfArr[0]];
+            let phi = [acfArr[0]];
+            for (let k = 1; k < n; k++) {
+                let num = getR(k + 1), den = 1;
+                for (let j = 1; j <= k; j++) {
+                    num -= phi[j - 1] * getR(k + 1 - j);
+                    den -= phi[j - 1] * getR(j);
+                }
+                const pk = Math.abs(den) > 1e-10 ? num / den : 0;
+                const newPhi = [...phi.map((v, j) => v - pk * (phi[k - 1 - j] ?? 0)), pk];
+                phi = newPhi;
+                pacf.push(pk);
+            }
+            return pacf;
+        }
+
+        function lgamma(x) {
+            const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
+                -1.231739572450155, 1.208650973866179e-3, -5.395239384953e-6];
+            let y = x, tmp = x + 5.5 - (x + 0.5) * Math.log(x + 5.5), ser = 1.000000000190015;
+            for (const ci of c) ser += ci / ++y;
+            return -tmp + Math.log(2.5066282746310005 * ser / x);
+        }
+
+        function ibeta(x, a, b) {
+            if (x <= 0) return 0; if (x >= 1) return 1;
+            if (x > (a + 1) / (a + b + 2)) return 1 - ibeta(1 - x, b, a);
+            const lnB = lgamma(a) + lgamma(b) - lgamma(a + b);
+            const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lnB) / a;
+            const FPMIN = 1e-30, EPS = 3e-7;
+            let c = 1, d = 1 - (a + b) * x / (a + 1);
+            if (Math.abs(d) < FPMIN) d = FPMIN; d = 1 / d; let h = d;
+            for (let m = 1; m <= 200; m++) {
+                let aa = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+                d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+                c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+                d = 1 / d; h *= d * c;
+                aa = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+                d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+                c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+                d = 1 / d; const del = d * c; h *= del;
+                if (Math.abs(del - 1) < EPS) break;
+            }
+            return front * h;
+        }
+
+        function fPValue(f, d1, d2) {
+            if (f <= 0) return 1;
+            return ibeta(d2 / (d2 + d1 * f), d2 / 2, d1 / 2);
+        }
+
+        function detectFreq(dates) {
+            const months = new Set(dates.map(d => d.split('-')[1] ?? ''));
+            return months.size >= 10 ? 12 : 4;
+        }
+
+        // ── Statistical metadata (for scanner) ────────────────────────────────────
+        function computeMeta(pts) {
+            // pts = [{date, value}] sorted oldest→newest
+            const values = pts.map(d => d.value);
+            const n = values.length;
+            if (n === 0) return null;
+            const mu = mean(values);
+            const va = n > 1 ? values.reduce((s, x) => s + (x - mu) ** 2, 0) / (n - 1) : 0;
+
+            // ARCH(1) LM statistic for heteroscedasticity
+            let archStat = 0;
+            if (n >= 4) {
+                const residSq = values.map(x => (x - mu) ** 2);
+                const y = residSq.slice(1), x = residSq.slice(0, -1);
+                const my = mean(y), mx = mean(x);
+                let sxy = 0, sxx = 0;
+                for (let i = 0; i < y.length; i++) {
+                    sxy += (x[i] - mx) * (y[i] - my);
+                    sxx += (x[i] - mx) ** 2;
+                }
+                if (sxx > 0) {
+                    const beta = sxy / sxx, alpha = my - beta * mx;
+                    const ssRes = y.reduce((s, yi, i) => s + (yi - (alpha + beta * x[i])) ** 2, 0);
+                    const ssTot = y.reduce((s, yi) => s + (yi - my) ** 2, 0);
+                    archStat = ssTot > 0 ? y.length * (1 - ssRes / ssTot) : 0;
+                }
+            }
+
+            // Stationarity proxy: 1 - |r1| (0 = unit root, 1 = stationary)
+            const acf1 = n > 1 ? computeAcf(values, 1)[0] ?? 0 : 0;
+            const stationarity = 1 - Math.abs(acf1);
+
+            // Top 5 latest (most recent first)
+            const latest5 = pts.slice(-5).reverse();
+
+            return { n, mu, va, archStat, stationarity, latest5 };
+        }
+
+        // ── Main analysis (for Tab 1 + scanner verify) ────────────────────────────
+        function analyze(trainingData) {
+            const s = detectFreq(trainingData.map(d => d.date));
+            const values = trainingData.map(d => d.value);
+            const n = values.length;
+            const bound = 1.96 / Math.sqrt(n);
+            const acf = computeAcf(values, 2 * s);
+            const pacf = computePacf(acf);
+            const acfAtS = acf[s - 1] ?? 0;
+            const acfSig = Math.abs(acfAtS) > bound;
+
+            const groups = Array.from({ length: s }, () => []);
+            for (const { date, value } of trainingData) {
+                const m = parseInt(date.split('-')[1] ?? '1', 10);
+                groups[(m - 1) % s].push(value);
+            }
+            const grandMean = mean(values);
+            const seasonalMeans = groups.map(g => g.length ? mean(g) : 0);
+            const ssBw = groups.reduce((a, g, j) => a + g.length * (seasonalMeans[j] - grandMean) ** 2, 0);
+            const ssWi = groups.reduce((a, g, j) => a + g.reduce((b, x) => b + (x - seasonalMeans[j]) ** 2, 0), 0);
+            const dfB = s - 1, dfW = n - s;
+            const fStat = dfW > 0 && ssWi > 0 ? (ssBw / dfB) / (ssWi / dfW) : 0;
+            const pValue = fPValue(fStat, dfB, dfW);
+            const fSig = pValue < 0.05;
+            const verdict = (acfSig && fSig) ? 'seasonal'
+                : (!acfSig && !fSig) ? 'not_seasonal' : 'inconclusive';
+            const complexity = scoreComplexity(values, acf, pacf, bound, s);
+            return {
+                s, acf, pacf, bound, acfAtS, acfSig, fStat, pValue, fSig,
+                verdict, seasonalMeans, complexity
+            };
+        }
+
+        function scoreComplexity(values, acf, pacf, bound, s) {
+            const isSeasonalLag = i => i === s - 1 || i === 2 * s - 1;
+            const sigAcfNS = acf.slice(0, 2 * s).filter((_, i) => !isSeasonalLag(i) && Math.abs(acf[i]) > bound).length;
+            const sigPacfNS = acf.slice(0, 2 * s).filter((_, i) => !isSeasonalLag(i) && Math.abs(pacf[i] ?? 0) > bound).length;
+            const acfAtS = Math.abs(acf[s - 1] ?? 0);
+            const acfAt2S = Math.abs(acf[2 * s - 1] ?? 0);
+            const pacfAtS = Math.abs(pacf[s - 1] ?? 0);
+            const ss = acfAtS / bound;
+            const r1 = Math.abs(acf[0] ?? 0);
+            const mixed = sigAcfNS > 1 && sigPacfNS > 1;
+            const crit = [
+                {
+                    name: 'Strong seasonal pattern',
+                    pass: ss > 3,
+                    value: 'r_' + s + ' = ' + acfAtS.toFixed(3) + '  (' + ss.toFixed(1) + '× bound)',
+                    hint: ss > 5 ? 'Very strong seasonality (excellent)' : ss > 3 ? 'Clear seasonality' :
+                        ss > 1 ? 'Weak seasonality — marginal' : 'No seasonality detected — AVOID'
+                },
+                {
+                    name: 'Non-stationarity (needs differencing)',
+                    pass: r1 > 0.6,
+                    value: 'r₁ = ' + r1.toFixed(3),
+                    hint: r1 > 0.7 ? 'Strong trend / unit root — d ≥ 1 needed' :
+                        r1 > 0.6 ? 'Likely non-stationary' : 'May already be stationary'
+                },
+                {
+                    name: 'Complex AR structure  (PACF: ≥ 2 non-seasonal lags)',
+                    pass: sigPacfNS > 1,
+                    value: sigPacfNS + ' significant non-seasonal PACF lags',
+                    hint: sigPacfNS > 3 ? 'High AR order — complex' :
+                        sigPacfNS === 1 ? 'Likely AR(1) only — too simple' : 'No AR pattern'
+                },
+                {
+                    name: 'Complex MA structure  (ACF: ≥ 2 non-seasonal lags)',
+                    pass: sigAcfNS > 1,
+                    value: sigAcfNS + ' significant non-seasonal ACF lags',
+                    hint: sigAcfNS > 3 ? 'High MA order — complex' :
+                        sigAcfNS === 1 ? 'Likely MA(1) only — too simple' : 'No MA pattern'
+                },
+                {
+                    name: 'Mixed ARMA  (both ACF and PACF tail off)',
+                    pass: mixed,
+                    value: mixed ? 'Both ACF and PACF have multiple significant lags' : 'One of ACF / PACF cuts off sharply',
+                    hint: mixed ? 'ARMA(p,q) model needed — good complexity' : 'Pure AR or MA model'
+                },
+                {
+                    name: 'Seasonal ARMA component  (P or Q ≥ 1)',
+                    pass: acfAt2S > bound || pacfAtS > bound,
+                    value: 'ACF(2s)=' + acfAt2S.toFixed(3) + '  PACF(s)=' + pacfAtS.toFixed(3),
+                    hint: (acfAt2S > bound || pacfAtS > bound) ? 'Seasonal MA/AR component needed' : 'Simple seasonal differencing may suffice'
+                },
+            ];
+            const score = crit.filter(c => c.pass).length;
+            const GRADES = ['AVOID (0/6)', 'AVOID (1/6)', 'MARGINAL (2/6)', 'MARGINAL (3/6)',
+                'GOOD (4/6)', 'EXCELLENT (5/6)', 'EXCELLENT (6/6)'];
+            const COLORS = ['#991b1b', '#b91c1c', '#92400e', '#78350f', '#1e3a8a', '#166534', '#14532d'];
+            const grade = GRADES[score] ?? String(score);
+            const gradeColor = COLORS[score] ?? '#374151';
+            const p = sigPacfNS > 0 ? Math.min(sigPacfNS, 2) : 1;
+            const q = sigAcfNS > 0 ? Math.min(sigAcfNS, 2) : 1;
+            const P = pacfAtS > bound ? 1 : 0;
+            const Q = acfAtS > bound ? 1 : 0;
+            const D = 1, d = r1 > 0.5 ? 1 : 0;
+            const modelHint = '💡 Tentative model: SARIMA(' + p + ',' + d + ',' + q + ')(' + P + ',' + D + ',' + Q + ')_' + s +
+                ' — verify with SAS ACF/PACF diagnostics';
+            return { score, grade, gradeColor, crit, modelHint };
+        }
+
+        function processPoints(pts) {
+            const all = pts.filter(p => p.value !== null)
+                .map(p => ({ date: p.refPer, value: p.value }))
+                .sort((a, b) => a.date.localeCompare(b.date));
+            const win = all.slice(-N_TOTAL);
+            return {
+                trainingData: win.slice(0, N_TRAINING),
+                validationData: win.slice(N_TRAINING)
+            };
+        }
+
+        // ── Charts ─────────────────────────────────────────────────────────────────
+        let _charts = {};
+        function killCharts() { Object.values(_charts).forEach(c => c.destroy()); _charts = {}; }
+
+        function renderCharts(td, vd, ana) {
+            killCharts();
+            const { s, acf, pacf, bound, seasonalMeans } = ana;
+            const all = [...td, ...vd];
+            const BLUE = 'rgba(59,130,246,0.9)', BLUE_F = 'rgba(59,130,246,0.12)';
+            const ORA = 'rgba(249,115,22,0.9)', RED = 'rgba(239,68,68,0.85)';
+            const GRN = 'rgba(16,185,129,0.75)', GREY = 'rgba(100,116,139,0.55)';
+
+            _charts.ts = new Chart(document.getElementById('tsChart'), {
+                type: 'line',
+                data: {
+                    labels: all.map(d => d.date), datasets: [
+                        {
+                            label: 'Training (' + td.length + ')',
+                            data: [...td.map(d => d.value), ...Array(vd.length).fill(null)],
+                            borderColor: BLUE, backgroundColor: BLUE_F, borderWidth: 1.5,
+                            pointRadius: 0, fill: true, tension: 0.3
+                        },
+                        {
+                            label: 'Validation (' + vd.length + ')',
+                            data: [...Array(td.length).fill(null), ...vd.map(d => d.value)],
+                            borderColor: ORA, borderWidth: 2, borderDash: [6, 3], pointRadius: 3, fill: false
+                        }
+                    ]
+                },
+                options: {
+                    animation: false, plugins: { legend: { position: 'top' } },
+                    scales: { x: { ticks: { maxTicksLimit: 20 } } }
+                }
+            });
+
+            const acfCol = acf.map((_, i) =>
+                (i === s - 1 || i === 2 * s - 1) ? RED : Math.abs(acf[i]) > bound ? 'rgba(239,68,68,0.55)' : GREY);
+            _charts.acf = new Chart(document.getElementById('acfChart'), {
+                type: 'bar',
+                data: {
+                    labels: acf.map((_, i) => i + 1), datasets: [
+                        { label: 'ACF', data: acf, backgroundColor: acfCol, borderWidth: 0 },
+                        {
+                            data: Array(acf.length).fill(bound), type: 'line', borderColor: RED,
+                            borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, fill: false, label: '+95%'
+                        },
+                        {
+                            data: Array(acf.length).fill(-bound), type: 'line', borderColor: RED,
+                            borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, fill: false, label: '-95%'
+                        }
+                    ]
+                },
+                options: {
+                    animation: false, plugins: { legend: { display: false } },
+                    scales: { y: { min: -1, max: 1, title: { display: true, text: 'r_k' } } }
+                }
+            });
+
+            const pacfCol = pacf.map((_, i) =>
+                i === s - 1 ? RED : Math.abs(pacf[i]) > bound ? GRN : GREY);
+            _charts.pacf = new Chart(document.getElementById('pacfChart'), {
+                type: 'bar',
+                data: {
+                    labels: pacf.map((_, i) => i + 1), datasets: [
+                        { label: 'PACF', data: pacf, backgroundColor: pacfCol, borderWidth: 0 },
+                        {
+                            data: Array(pacf.length).fill(bound), type: 'line', borderColor: RED,
+                            borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, fill: false, label: '+95%'
+                        },
+                        {
+                            data: Array(pacf.length).fill(-bound), type: 'line', borderColor: RED,
+                            borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0, fill: false, label: '-95%'
+                        }
+                    ]
+                },
+                options: {
+                    animation: false, plugins: { legend: { display: false } },
+                    scales: { y: { min: -1, max: 1, title: { display: true, text: 'φ_kk' } } }
+                }
+            });
+
+            const sLabels = s === 12
+                ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                : ['Q1', 'Q2', 'Q3', 'Q4'];
+            const gm = mean(seasonalMeans);
+            _charts.sm = new Chart(document.getElementById('smChart'), {
+                type: 'bar',
+                data: {
+                    labels: sLabels, datasets: [
+                        {
+                            label: 'Mean', data: seasonalMeans,
+                            backgroundColor: seasonalMeans.map(v => v > gm ? BLUE : 'rgba(249,115,22,0.7)'),
+                            borderWidth: 0
+                        },
+                        {
+                            data: Array(s).fill(gm), type: 'line', borderColor: '#64748b',
+                            borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, fill: false, label: 'Grand mean'
+                        }
+                    ]
+                },
+                options: { animation: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        // ── UI helpers ─────────────────────────────────────────────────────────────
+        const $ = id => document.getElementById(id);
+        const show = id => $(id).hidden = false;
+        const hide = id => $(id).hidden = true;
+
+        function setStatus(msg, type = 'info') {
+            const el = $('status');
+            el.textContent = msg; el.className = 'status ' + type; el.hidden = false;
+        }
+
+        const FREQ_LABELS = { 6: 'Monthly (s=12)', 9: 'Quarterly (s=4)', 12: 'Annual', 1: 'Daily' };
+
+        function renderInfo(info) {
+            $('seriesTitle').textContent = info.SeriesTitleEn ?? 'Unknown';
+            $('seriesDetails').textContent =
+                'Vector ' + info.vectorId + '  ·  Table ' + info.productId +
+                '  ·  ' + (FREQ_LABELS[info.frequencyCode] ?? 'freq=' + info.frequencyCode) +
+                '  ·  ' + (info.startDate?.slice(0, 7) ?? '?') + ' → ' + (info.endDate?.slice(0, 7) ?? '?');
+            show('seriesInfoBox');
+        }
+
+        function renderComplexity(cx) {
+            $('complexityGrade').textContent = cx.grade;
+            $('complexityGrade').style.color = cx.gradeColor;
+            $('complexityScore').textContent = cx.score + ' / 6 criteria met';
+            $('complexityModel').textContent = cx.modelHint;
+            $('complexityCriteria').innerHTML = cx.crit.map(c =>
+                '<div class="criterion ' + (c.pass ? 'pass' : 'fail') + '">' +
+                '<span class="icon">' + (c.pass ? '✓' : '✗') + '</span>' +
+                '<span class="cname">' + c.name + '</span>' +
+                '<span class="cval">' + c.value + '</span>' +
+                '<span class="chint">' + c.hint + '</span>' +
+                '</div>'
+            ).join('');
+        }
+
+        const VCOLOR = { seasonal: '#166534', not_seasonal: '#1e3a8a', inconclusive: '#92400e' };
+        const VBGC = { seasonal: '#dcfce7', not_seasonal: '#dbeafe', inconclusive: '#fef3c7' };
+        const VLBL = { seasonal: 'SEASONAL', not_seasonal: 'NOT SEASONAL', inconclusive: 'INCONCLUSIVE' };
+
+        function renderAnalysisPanel(ana) {
+            const v = ana.verdict;
+            const box = $('seasonalityVerdict');
+            box.style.background = VBGC[v]; box.style.color = VCOLOR[v]; box.style.borderColor = VCOLOR[v];
+            $('verdictLabel').textContent = VLBL[v];
+            $('lagLabel').textContent = ana.s;
+            $('acfStat').textContent = ana.acfAtS.toFixed(4);
+            $('acfBound').textContent = '±' + ana.bound.toFixed(4);
+            $('fStat').textContent = ana.fStat.toFixed(3);
+            $('fPval').textContent = ana.pValue < 0.0001 ? '< 0.0001' : ana.pValue.toFixed(4);
+        }
+
+        // ── Core load function (Tab 1) ─────────────────────────────────────────────
+        async function loadAndAnalyze(vectorId) {
+            setStatus('Fetching from Statistics Canada…', 'info');
+            try {
+                const [infoArr, dataArr] = await Promise.all([
+                    fetchSeriesInfo(vectorId),
+                    fetchVectorData(vectorId),
+                ]);
+                const infoItem = infoArr[0]; const dataItem = dataArr[0];
+                if (infoItem?.status !== 'SUCCESS') throw new Error('Vector ' + vectorId + ' not found');
+                if (dataItem?.status !== 'SUCCESS') throw new Error('Data fetch failed for vector ' + vectorId);
+
+                const { trainingData, validationData } = processPoints(dataItem.object.vectorDataPoint);
+                if (trainingData.length < 24) throw new Error('Only ' + trainingData.length + ' obs — need at least 24');
+
+                setStatus('Running analysis…', 'info');
+                const ana = analyze(trainingData);
+
+                renderInfo(infoItem.object);
+                renderComplexity(ana.complexity);
+                renderCharts(trainingData, validationData, ana);
+                renderAnalysisPanel(ana);
+                show('reportBox');
+                $('reportBox').scrollIntoView({ behavior: 'smooth' });
+                setStatus('Done — ' + trainingData.length + ' training + ' + validationData.length + ' validation obs.', 'success');
+            } catch (e) {
+                setStatus('Error: ' + (e.message ?? e), 'error');
+            }
+        }
+
+        // ── Supabase DB Browser (Tab 2) ────────────────────────────────────────────
+        const SB_STORAGE_KEY = 'cansim_sb_v1';
+        let sbState = { url: '', key: '', connected: false };
+        let sbPage = 0;
+
+        function loadSbConfig() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(SB_STORAGE_KEY) ?? 'null');
+                if (saved?.url) {
+                    sbState.url = saved.url; sbState.key = saved.key;
+                    $('sbUrl').value = saved.url; $('sbKey').value = saved.key;
+                }
+            } catch { /* ignore */ }
+        }
+
+        function saveSbConfig(url, key) {
+            localStorage.setItem(SB_STORAGE_KEY, JSON.stringify({ url, key }));
+        }
+
+        function setSbDot(state) {
+            const dot = $('sbDot');
+            dot.className = 'sb-status-dot ' + state;
+        }
+
+        async function sbConnect() {
+            const url = $('sbUrl').value.trim().replace(/\/$/, '');
+            const key = $('sbKey').value.trim();
+            if (!url || !key) { setStatus('Enter both Supabase URL and key.', 'error'); return; }
+            setStatus('Testing Supabase connection…', 'info');
+            setSbDot('idle');
+            try {
+                const r = await fetch(`${url}/rest/v1/vectors?select=vector_id&limit=1`, {
+                    headers: { 'apikey': key, 'Authorization': 'Bearer ' + key }
+                });
+                if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text().catch(() => '')).slice(0, 120));
+                sbState = { url, key, connected: true };
+                saveSbConfig(url, key);
+                setSbDot('ok');
+                show('sbFilters');
+                setStatus('Connected. Search to browse vectors.', 'success');
+                await sbSearchVectors();
+            } catch (e) {
+                setSbDot('err');
+                setStatus('Connection failed — ' + (e.message ?? e), 'error');
+            }
+        }
+
+        function getSbFilters() {
+            const limit = parseInt($('pageSizeSelect').value, 10);
+            return {
+                tablePrefix: $('tableFilter').value.trim(),
+                freq: $('freqFilter').value,
+                minAcf: parseFloat($('acfSlider').value) / 100,
+                scannedOnly: $('scannedFilter').checked,
+                limit,
+                offset: sbPage * limit,
+            };
+        }
+
+        async function fetchFromSupabase(filters) {
+            const { url, key } = sbState;
+            const params = new URLSearchParams();
+            params.set('select', '*');
+            if (filters.tablePrefix) params.set('table_id', 'ilike.' + filters.tablePrefix + '*');
+            if (filters.freq) params.set('frequency_code', 'eq.' + filters.freq);
+            if (filters.scannedOnly) params.append('acf_score', 'not.is.null');
+            if (filters.minAcf > 0) params.append('acf_score', 'gte.' + filters.minAcf.toFixed(2));
+            params.set('order', 'acf_score.desc.nullslast');
+            params.set('limit', String(filters.limit));
+            params.set('offset', String(filters.offset));
+
+            const r = await fetch(`${url}/rest/v1/vectors?${params}`, {
+                headers: { 'apikey': key, 'Authorization': 'Bearer ' + key, 'Prefer': 'count=exact' }
+            });
+            if (!r.ok) throw new Error('Supabase ' + r.status + ': ' + (await r.text().catch(() => '')).slice(0, 200));
+            const total = parseInt((r.headers.get('content-range') ?? '').split('/')[1] ?? '0', 10) || 0;
+            return { data: await r.json(), total };
+        }
+
+        function acfBarHtml(score) {
+            if (score === null || score === undefined)
+                return '<div style="font-size:.72rem;color:#94a3b8;margin-top:.4rem">not scanned</div>';
+            const abs = Math.abs(score), pct = Math.round(abs * 100);
+            const color = abs > 0.7 ? '#16a34a' : abs > 0.5 ? '#ca8a04' : abs > 0.3 ? '#ea580c' : '#94a3b8';
+            const label = abs > 0.7 ? 'Very strong' : abs > 0.5 ? 'Strong' : abs > 0.3 ? 'Moderate' : 'Weak';
+            return `<div class="acf-bar-wrap">
+    <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#64748b;margin-bottom:.2rem">
+      <span>ACF(s) = ${score.toFixed(3)}</span>
+      <span style="color:${color};font-weight:600">${label}</span>
+    </div>
+    <div class="acf-bar-track"><div class="acf-bar-fill" style="background:${color};width:${pct}%"></div></div>
+  </div>`;
+        }
+
+        function statChipsHtml(v) {
+            if (v.mean_val === null && v.variance === null) return '';
+            const chips = [];
+            if (v.mean_val != null) chips.push(`<span class="chip">μ=${v.mean_val.toFixed(2)}</span>`);
+            if (v.variance != null) chips.push(`<span class="chip">σ²=${v.variance.toFixed(2)}</span>`);
+            if (v.arch_stat != null) {
+                const cls = v.arch_stat > 3.84 ? 'red' : 'green';
+                chips.push(`<span class="chip ${cls}">ARCH=${v.arch_stat.toFixed(2)}</span>`);
+            }
+            if (v.stationarity != null) {
+                const cls = v.stationarity > 0.4 ? 'green' : v.stationarity > 0.15 ? 'yellow' : 'red';
+                chips.push(`<span class="chip ${cls}">Stat=${v.stationarity.toFixed(2)}</span>`);
+            }
+            return chips.length ? `<div class="stat-chips">${chips.join('')}</div>` : '';
+        }
+
+        function renderVectorCards(vectors, total, filters) {
+            const list = $('vectorList');
+            if (vectors.length === 0) {
+                list.innerHTML = '<p style="color:#94a3b8;margin:.75rem 0">No vectors match the current filters.</p>';
+                $('paginationRow').hidden = true; return;
+            }
+            const from = filters.offset + 1;
+            const to = Math.min(filters.offset + vectors.length, total);
+            list.innerHTML = `
+    <p style="font-size:.8rem;color:#64748b;margin:.4rem 0 .6rem">
+      Showing ${from}–${to} of ${total || '?'} vectors
+    </p>
+    <div class="v-grid">
+      ${vectors.map(v => `
+        <div class="v-card" onclick="loadAndAnalyze(${v.vector_id})">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.3rem">
+            <span style="font-weight:700;font-size:.95rem;color:#1e40af">v${v.vector_id}</span>
+            <span style="font-size:.7rem;background:#f1f5f9;padding:.1rem .45rem;border-radius:.3rem;color:#475569;white-space:nowrap">
+              ${FREQ_LABELS[v.frequency_code] ?? 'freq=' + v.frequency_code}
+            </span>
+          </div>
+          <div style="font-size:.79rem;color:#374151;line-height:1.35;margin-bottom:.3rem;min-height:2em">
+            ${v.series_title ? v.series_title : '<em style="color:#94a3b8">No title</em>'}
+          </div>
+          <div style="font-size:.7rem;color:#94a3b8;margin-bottom:.15rem">
+            ${v.table_id} · ${(v.start_date ?? '').slice(0, 7) || '?'} → ${(v.end_date ?? '').slice(0, 7) || '?'}
+          </div>
+          ${acfBarHtml(v.acf_score)}
+          ${statChipsHtml(v)}
+          <button class="btn-primary"
+                  style="width:100%;margin-top:.55rem;padding:.3rem .5rem;font-size:.78rem"
+                  onclick="event.stopPropagation();loadAndAnalyze(${v.vector_id})">
+            Analyze →
+          </button>
+        </div>
+      `).join('')}
+    </div>`;
+
+            const pageRow = $('paginationRow');
+            const totalPages = Math.ceil(total / filters.limit);
+            if (totalPages <= 1) { pageRow.hidden = true; return; }
+            pageRow.hidden = false;
+            pageRow.innerHTML = `
+    <button class="btn-primary" onclick="sbChangePage(-1)" ${sbPage === 0 ? 'disabled' : ''}>← Prev</button>
+    <span style="font-size:.875rem;color:#64748b;min-width:7rem;text-align:center">Page ${sbPage + 1} / ${totalPages}</span>
+    <button class="btn-primary" onclick="sbChangePage(1)" ${sbPage >= totalPages - 1 ? 'disabled' : ''}>Next →</button>`;
+        }
+
+        async function sbSearchVectors() {
+            if (!sbState.connected) { setStatus('Connect to Supabase first.', 'error'); return; }
+            sbPage = 0; await sbLoadPage();
+        }
+
+        async function sbLoadPage() {
+            const filters = getSbFilters();
+            setStatus('Querying Supabase…', 'info');
+            try {
+                const { data, total } = await fetchFromSupabase(filters);
+                renderVectorCards(data, total, filters);
+                hide('status');
+            } catch (e) { setStatus('Error: ' + (e.message ?? e), 'error'); }
+        }
+
+        async function sbChangePage(delta) {
+            sbPage = Math.max(0, sbPage + delta);
+            await sbLoadPage();
+        }
+
+        // ── Supabase upsert (for scanner) ──────────────────────────────────────────
+        async function upsertToSupabase(record) {
+            const { url, key } = sbState;
+            if (!url || !key) throw new Error('Not connected to Supabase');
+            const r = await fetch(`${url}/rest/v1/vectors?on_conflict=vector_id`, {
+                method: 'POST',
+                headers: {
+                    'apikey': key,
+                    'Authorization': 'Bearer ' + key,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates,return=minimal',
+                },
+                body: JSON.stringify(record),
+            });
+            if (!r.ok) {
+                const body = await r.text().catch(() => '');
+                throw new Error('Supabase write ' + r.status + ': ' + body.slice(0, 200));
+            }
+        }
+
+        // ── Scanner (Tab 3) ────────────────────────────────────────────────────────
+        let scannerActive = false;
+        // Manual mode state
+        let scanQueue = [];
+        let scanPos = 0, scanOk = 0, scanFail = 0;
+        // Auto-discover state  (vector ID range probe via getSeriesInfoFromVector — CORS-safe)
+        const AUTO_STATE_KEY = 'cansim_auto_v4';
+        const PROBE_BATCH = 300;        // IDs probed per batch request
+        let autoNextId = 1000000; // next vector ID to probe
+        let autoEndId = 9000000; // probe until this ID (inclusive)
+        let autoScanQueue = [];      // IDs found in probe, pending full scan
+        let autoScanIdx = 0;       // position in autoScanQueue
+        let autoTotalScanned = 0;
+
+        function autoStartId() { return parseInt($('autoStartId').value, 10) || 1000000; }
+        function autoEndIdVal() { return parseInt($('autoEndId').value, 10) || 9000000; }
+
+        function saveAutoState() {
+            localStorage.setItem(AUTO_STATE_KEY, JSON.stringify({
+                startId: autoStartId(),
+                nextId: autoNextId,
+                endId: autoEndId,
+                totalScanned: autoTotalScanned,
+                pendingQueue: autoScanQueue.slice(autoScanIdx),
+            }));
+        }
+
+        function loadAutoState() {
+            try {
+                const s = JSON.parse(localStorage.getItem(AUTO_STATE_KEY) ?? 'null');
+                if (s && typeof s.nextId === 'number') {
+                    autoNextId = s.nextId;
+                    autoEndId = s.endId ?? autoEndIdVal();
+                    autoTotalScanned = s.totalScanned ?? 0;
+                    autoScanQueue = s.pendingQueue ?? [];
+                    autoScanIdx = 0;
+                    // Restore inputs if they exist in the DOM
+                    if (s.startId) { const el = $('autoStartId'); if (el) el.value = s.startId; }
+                    if (s.endId) { const el = $('autoEndId'); if (el) el.value = s.endId; }
+                    return true;
+                }
+            } catch { /* ignore */ }
+            return false;
+        }
+
+        function resetAutoState() {
+            autoNextId = autoStartId();
+            autoEndId = autoEndIdVal();
+            autoScanQueue = [];
+            autoScanIdx = 0;
+            autoTotalScanned = 0;
+            localStorage.removeItem(AUTO_STATE_KEY);
+            $('autoProgressInfo').hidden = true;
+            logScan('Auto-discover progress reset.', 'info');
+        }
+
+        function updateAutoProgressInfo() {
+            const el = $('autoProgressInfo');
+            el.hidden = false;
+            const startId = autoStartId();
+            const range = Math.max(1, autoEndId - startId);
+            const probed = Math.max(0, autoNextId - startId);
+            const pct = Math.min(100, Math.round(probed / range * 100));
+            const pending = autoScanQueue.length - autoScanIdx;
+            el.textContent =
+                `Probed up to v${autoNextId.toLocaleString()}  (${pct}%)  ·  ` +
+                `Pending scan: ${pending}  ·  Saved to DB: ${autoTotalScanned}`;
+        }
+
+        // ── Queue status (poll scan_tasks counts from Supabase) ───────────────────────
+        let queuePollTimer = null;
+
+        async function fetchQueueCounts() {
+            if (!sbState.connected) return null;
+            const { url, key } = sbState;
+            const statuses = ['pending', 'processing', 'done', 'error'];
+            const counts = {};
+            await Promise.all(statuses.map(async s => {
+                const r = await fetch(`${url}/rest/v1/scan_tasks?status=eq.${s}&limit=0`, {
+                    headers: {
+                        'apikey': key,
+                        'Authorization': 'Bearer ' + key,
+                        'Prefer': 'count=exact',
+                    }
+                });
+                const cr = r.headers.get('content-range') ?? '';
+                counts[s] = parseInt(cr.split('/')[1] ?? '0', 10) || 0;
+            }));
+            return counts;
+        }
+
+        async function refreshQueueStatus() {
+            const el = $('queueStatus');
+            if (!sbState.connected) { el.hidden = true; return; }
+            el.hidden = false;
+            try {
+                const c = await fetchQueueCounts();
+                if (c) {
+                    $('qPending').textContent = c.pending ?? '—';
+                    $('qProcessing').textContent = c.processing ?? '—';
+                    $('qDone').textContent = c.done ?? '—';
+                    $('qError').textContent = c.error ?? '—';
+                }
+            } catch { /* ignore */ }
+        }
+
+        function startQueuePolling() {
+            if (queuePollTimer) return;
+            refreshQueueStatus();
+            queuePollTimer = setInterval(refreshQueueStatus, 5000);
+        }
+
+        function stopQueuePolling() {
+            if (queuePollTimer) { clearInterval(queuePollTimer); queuePollTimer = null; }
+        }
+
+        // Queue a single vector ID into scan_tasks (upsert — ignore if already queued)
+        async function queueVector(vectorId) {
+            const { url, key } = sbState;
+            if (!url || !key) throw new Error('Not connected to Supabase');
+            const r = await fetch(`${url}/rest/v1/scan_tasks?on_conflict=vector_id`, {
+                method: 'POST',
+                headers: {
+                    'apikey': key,
+                    'Authorization': 'Bearer ' + key,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=ignore-duplicates,return=minimal',
+                },
+                body: JSON.stringify({ vector_id: vectorId, status: 'pending' }),
+            });
+            if (!r.ok) throw new Error('Queue insert failed: ' + (await r.text().catch(() => r.status)));
+        }
+
+        // Auto-discover main loop — two-phase: probe IDs then QUEUE valid hits
+        async function runAutoScanner() {
+            const rateMs = Math.max(100, Math.round(1000 / parseFloat($('scanRate').value || '2')));
+            const seasonalOnly = $('autoSeasonalOnly').checked;
+            autoEndId = autoEndIdVal();
+            startQueuePolling();
+
+            while (scannerActive) {
+
+                // Phase A: queue pending discovered IDs into scan_tasks (CORS-safe Supabase write)
+                while (scannerActive && autoScanIdx < autoScanQueue.length) {
+                    const vectorId = autoScanQueue[autoScanIdx];
+                    $('scanProgressLabel').textContent = `Queuing v${vectorId.toLocaleString()}…`;
+                    try {
+                        await queueVector(vectorId);
+                        scanOk++; autoTotalScanned++;
+                        logScan(`  → v${vectorId} queued for worker scan`, 'ok');
+                    } catch (e) {
+                        scanFail++;
+                        logScan(`  ✗ v${vectorId}: ${e.message ?? e}`, 'err');
+                    }
+                    autoScanIdx++;
+                    $('scanSuccessCount').textContent = `✓ ${scanOk}`;
+                    $('scanFailCount').textContent = `✗ ${scanFail}`;
+                    saveAutoState();
+                    updateAutoProgressInfo();
+                    if (scannerActive) await new Promise(r => setTimeout(r, rateMs));
+                }
+
+                // Phase B: done?
+                if (autoNextId > autoEndId) {
+                    logScan(
+                        `\nAuto-discover complete!  Range v${autoStartId().toLocaleString()}–` +
+                        `v${autoEndId.toLocaleString()} fully probed.  ` +
+                        `${autoTotalScanned} saved, ${scanFail} failed.`,
+                        'info'
+                    );
+                    scannerActive = false;
+                    $('scanProgressLabel').textContent = 'Complete';
+                    break;
+                }
+
+                if (!scannerActive) break;
+
+                // Phase C: probe next batch of PROBE_BATCH IDs
+                const batchIds = [];
+                for (let i = 0; i < PROBE_BATCH && autoNextId + i <= autoEndId; i++) {
+                    batchIds.push(autoNextId + i);
+                }
+                $('scanProgressLabel').textContent =
+                    `Probing v${autoNextId.toLocaleString()}–v${(autoNextId + batchIds.length - 1).toLocaleString()}…`;
+
+                const startId = autoStartId();
+                const range = Math.max(1, autoEndId - startId);
+                const probed = Math.max(0, autoNextId - startId);
+                $('scanProgressBar').style.width = Math.min(100, Math.round(probed / range * 100)) + '%';
+                $('scanProgressCount').textContent =
+                    `v${autoNextId.toLocaleString()} / v${autoEndId.toLocaleString()}`;
+
+                try {
+                    const results = await wdsPost('getSeriesInfoFromVector',
+                        batchIds.map(id => ({ vectorId: id })));
+                    const valid = results
+                        .filter(r => r?.status === 'SUCCESS')
+                        .filter(r => !seasonalOnly || r.object?.frequencyCode === 6 || r.object?.frequencyCode === 9)
+                        .map(r => r.object?.vectorId)
+                        .filter(Boolean);
+                    if (valid.length) {
+                        logScan(
+                            `  Probe v${autoNextId.toLocaleString()}: ` +
+                            `${valid.length} valid series found${seasonalOnly ? ' (monthly/quarterly)' : ''}`,
+                            'info'
+                        );
+                        autoScanQueue.push(...valid);
+                    }
+                } catch (e) {
+                    logScan(`  Probe batch v${autoNextId.toLocaleString()}: ${e.message ?? e}`, 'err');
+                }
+
+                autoNextId += batchIds.length;
+                saveAutoState();
+                updateAutoProgressInfo();
+                if (scannerActive) await new Promise(r => setTimeout(r, rateMs));
+            }
+
+            stopQueuePolling();
+            updateScanBtn();
+        }
+
+        function logScan(msg, cls = '') {
+            const el = $('scanLog');
+            const line = cls ? `<span class="${cls}">${msg}</span>\n` : msg + '\n';
+            el.innerHTML += line;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function updateScanProgress() {
+            const total = scanQueue.length;
+            if (total === 0) return;
+            const pct = Math.round((scanPos / total) * 100);
+            $('scanProgressBar').style.width = pct + '%';
+            $('scanProgressCount').textContent = `${scanPos} / ${total}`;
+            $('scanSuccessCount').textContent = `✓ ${scanOk}`;
+            $('scanFailCount').textContent = `✗ ${scanFail}`;
+        }
+
+        function updateScanBtn() {
+            const btn = $('scanToggleBtn');
+            const chip = $('scanStatusChip');
+            const mode = document.querySelector('input[name="scanMode"]:checked')?.value ?? 'manual';
+            const isAuto = mode === 'auto';
+            if (scannerActive) {
+                btn.textContent = isAuto ? 'Stop Probing' : 'Stop Scanner';
+                btn.className = 'btn-danger';
+                chip.textContent = 'Running…';
+                chip.style.color = '#16a34a';
+            } else {
+                btn.textContent = isAuto ? 'Start Probing' : 'Start Scanner';
+                btn.className = 'btn-primary';
+                if (isAuto) {
+                    const startId = autoStartId();
+                    if (autoNextId > startId) {
+                        const pending = autoScanQueue.length - autoScanIdx;
+                        chip.textContent = `Paused — probed to v${autoNextId.toLocaleString()}, ${pending} to queue`;
+                    } else {
+                        chip.textContent = 'Ready — probes IDs and queues to Supabase';
+                    }
+                } else {
+                    chip.textContent = scanQueue.length ? `Paused (${scanPos}/${scanQueue.length})` : 'Idle';
+                }
+                chip.style.color = '#94a3b8';
+            }
+        }
+
+        async function runScanner() {
+            const rateMs = Math.max(100, Math.round(1000 / parseFloat($('scanRate').value || '2')));
+
+            while (scannerActive && scanPos < scanQueue.length) {
+                const vectorId = scanQueue[scanPos];
+                $('scanProgressLabel').textContent = `Scanning v${vectorId}…`;
+
+                try {
+                    await scanVector(vectorId);
+                    scanOk++;
+                } catch (e) {
+                    scanFail++;
+                    logScan(`  ✗ v${vectorId}: ${e.message ?? e}`, 'err');
+                }
+
+                scanPos++;
+                updateScanProgress();
+
+                // rate-limit delay
+                if (scannerActive && scanPos < scanQueue.length) {
+                    await new Promise(r => setTimeout(r, rateMs));
+                }
+            }
+
+            if (scanPos >= scanQueue.length && scanQueue.length > 0) {
+                logScan(`\nDone. ${scanOk} succeeded, ${scanFail} failed.`, 'info');
+                scannerActive = false;
+                $('scanProgressLabel').textContent = 'Complete';
+            }
+            updateScanBtn();
+        }
+
+        async function scanVector(vectorId) {
+            // 1. Fetch series info + 200 data points in parallel
+            const [infoArr, dataArr] = await Promise.all([
+                fetchSeriesInfo(vectorId),
+                fetchVectorN(vectorId, 200),
+            ]);
+
+            const infoItem = infoArr?.[0];
+            const dataItem = dataArr?.[0];
+            if (infoItem?.status !== 'SUCCESS') throw new Error('Series info failed: ' + (infoItem?.status ?? 'no response'));
+            if (dataItem?.status !== 'SUCCESS') throw new Error('Data fetch failed: ' + (dataItem?.status ?? 'no response'));
+
+            const info = infoItem.object;
+
+            // 2. Process data points
+            const pts = (dataItem.object.vectorDataPoint ?? [])
+                .filter(p => p.value !== null)
+                .map(p => ({ date: p.refPer, value: +p.value }))
+                .sort((a, b) => a.date.localeCompare(b.date));
+
+            if (pts.length < 12) throw new Error(`Too few obs: ${pts.length}`);
+
+            // 3. Compute metadata
+            const meta = computeMeta(pts);
+            const s = detectFreq(pts.map(p => p.date));
+            const acfArr = computeAcf(pts.map(p => p.value), s);
+            const acfAtS = acfArr[s - 1] ?? 0;
+
+            // 4. Upsert to Supabase
+            await upsertToSupabase({
+                vector_id: vectorId,
+                table_id: String(dataItem.object.productId ?? info.productId ?? ''),
+                series_title: info.SeriesTitleEn ?? null,
+                frequency_code: info.frequencyCode,
+                start_date: info.startDate?.slice(0, 7) ?? null,
+                end_date: info.endDate?.slice(0, 7) ?? null,
+                acf_score: acfAtS,
+                acf_lag: s,
+                acf_n_obs: pts.length,
+                mean_val: meta.mu,
+                variance: meta.va,
+                arch_stat: meta.archStat,
+                stationarity: meta.stationarity,
+                latest_pts: JSON.stringify(meta.latest5),
+                scanned_at: new Date().toISOString(),
+            });
+
+            // 5. Log
+            const acfStr = acfAtS.toFixed(3);
+            const verdict = Math.abs(acfAtS) > 1.96 / Math.sqrt(pts.length) ? 'seasonal' : 'flat';
+            const title = (info.SeriesTitleEn ?? '').slice(0, 42);
+            logScan(`  ✓ v${vectorId} | ${title} | ${FREQ_LABELS[info.frequencyCode] ?? '?'} | ACF(${s})=${acfStr} | ${verdict}`, 'ok');
+        }
+
+        function parseScanInput() {
+            const raw = $('scanVectorIds').value.trim();
+            if (!raw) return [];
+            return raw.split(/[\n,\s]+/)
+                .map(s => parseInt(s.trim(), 10))
+                .filter(n => !isNaN(n) && n > 0);
+        }
+
+        function toggleScanner() {
+            if (scannerActive) {
+                scannerActive = false;
+                stopQueuePolling();
+                updateScanBtn();
+                logScan('  Probing paused.', 'info');
+                return;
+            }
+
+            if (!sbState.connected) {
+                alert('Connect to Supabase first (Browse DB tab).');
+                return;
+            }
+
+            const mode = document.querySelector('input[name="scanMode"]:checked')?.value ?? 'manual';
+
+            if (mode === 'auto') {
+                // ── Auto-discover mode (vector ID range probe) ───────────────────────
+                const startId = autoStartId();
+                const endId = autoEndIdVal();
+
+                if (endId <= startId) {
+                    alert('End v must be greater than Start v.');
+                    return;
+                }
+
+                // First run ever for this range? Try to restore saved progress
+                if (autoNextId === 1000000 && autoScanQueue.length === 0 && autoTotalScanned === 0) {
+                    if (!loadAutoState()) {
+                        autoNextId = startId;
+                        autoEndId = endId;
+                    }
+                }
+
+                if (autoNextId <= startId) {
+                    // Fresh start
+                    autoNextId = startId; autoEndId = endId;
+                    autoScanQueue = []; autoScanIdx = 0; autoTotalScanned = 0;
+                    scanOk = 0; scanFail = 0;
+                    $('scanLog').textContent = '';
+                    logScan(
+                        `Starting auto-discover: probing v${startId.toLocaleString()} → v${endId.toLocaleString()} ` +
+                        `in batches of ${PROBE_BATCH}…`, 'info'
+                    );
+                } else {
+                    logScan(
+                        `Resuming from v${autoNextId.toLocaleString()} ` +
+                        `(${autoScanQueue.length - autoScanIdx} queued for scan)…`, 'info'
+                    );
+                }
+
+                show('scanProgressWrap');
+                updateAutoProgressInfo();
+                $('scanSuccessCount').textContent = `✓ ${scanOk}`;
+                $('scanFailCount').textContent = `✗ ${scanFail}`;
+
+                scannerActive = true;
+                updateScanBtn();
+                runAutoScanner();
+
+            } else {
+                // ── Manual mode ─────────────────────────────────────────────────────
+                const ids = parseScanInput();
+                if (ids.length === 0) {
+                    alert('Enter at least one Vector ID to scan.');
+                    return;
+                }
+
+                if (scanPos >= scanQueue.length) {
+                    // Fresh start
+                    scanQueue = ids;
+                    scanPos = 0; scanOk = 0; scanFail = 0;
+                    $('scanLog').textContent = '';
+                    logScan(`Starting scan of ${ids.length} vectors…`, 'info');
+                    show('scanProgressWrap');
+                    updateScanProgress();
+                } else {
+                    logScan('  Resuming…', 'info');
+                }
+
+                scannerActive = true;
+                updateScanBtn();
+                runScanner();
+            }
+        }
+
+        // ── Bootstrap ─────────────────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            // Tab switching
+            document.querySelectorAll('.tab').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    document.querySelectorAll('.tab-content').forEach(t => { t.hidden = true; });
+                    $(btn.dataset.tab).hidden = false;
+                });
+            });
+
+            // Tab 1: By Vector ID
+            $('loadVectorBtn').addEventListener('click', () => {
+                const v = parseInt($('vectorInput').value, 10);
+                if (!v || v <= 0) { setStatus('Enter a valid positive vector ID', 'error'); return; }
+                loadAndAnalyze(v);
+            });
+            $('vectorInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('loadVectorBtn').click(); });
+
+            // Tab 2: Supabase DB browser
+            loadSbConfig();
+            $('sbConnectBtn').addEventListener('click', sbConnect);
+            $('searchVectorsBtn').addEventListener('click', sbSearchVectors);
+            $('acfSlider').addEventListener('input', () => {
+                $('acfSliderVal').textContent = (parseInt($('acfSlider').value) / 100).toFixed(2);
+            });
+            $('tableFilter').addEventListener('keydown', e => { if (e.key === 'Enter') sbSearchVectors(); });
+            $('sbUrl').addEventListener('keydown', e => { if (e.key === 'Enter') $('sbKey').focus(); });
+            $('sbKey').addEventListener('keydown', e => { if (e.key === 'Enter') sbConnect(); });
+
+            // Tab 3: Scanner — mode switch
+            document.querySelectorAll('input[name="scanMode"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    const isAuto = $('scanModeAuto').checked;
+                    $('scanManualPanel').hidden = isAuto;
+                    $('scanAutoPanel').hidden = !isAuto;
+                    updateScanBtn();
+                    if (isAuto && sbState.connected) refreshQueueStatus();
+                });
+            });
+            $('scanToggleBtn').addEventListener('click', toggleScanner);
+            $('resetAutoBtn').addEventListener('click', () => {
+                if (scannerActive) { alert('Stop the probing first.'); return; }
+                if (confirm('Reset probe progress to the beginning of the range?')) resetAutoState();
+            });
+            $('queueRefreshBtn').addEventListener('click', refreshQueueStatus);
+
+            // Restore auto-discover progress indicator on load
+            {
+                const restored = loadAutoState();
+                if (restored && autoNextId > (parseInt($('autoStartId').value, 10) || 1000000)) {
+                    $('autoEndId').value = autoEndId;
+                    updateAutoProgressInfo();
+                    const pending = autoScanQueue.length - autoScanIdx;
+                    logScan(
+                        `Saved progress restored: probed up to v${autoNextId.toLocaleString()}  ·  ` +
+                        `${pending} pending to queue  ·  ${autoTotalScanned} queued total.  ` +
+                        `Click "Start Probing" to resume.`,
+                        'info'
+                    );
+                }
+            }
+
+            // Auto-connect if saved
+            if (sbState.url && sbState.key) sbConnect();
+        });
+    </script>
+</body>
+
+</html>

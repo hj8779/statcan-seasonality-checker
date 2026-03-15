@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CANSIM Report – 14-10-0287-01</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f8fafc; color: #1e293b; padding: 2rem; }
+    h1  { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
+    h2  { font-size: 1rem; font-weight: 600; color: #475569; margin-bottom: 1rem; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1.25rem; }
+    .card.full { grid-column: 1 / -1; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; color: #64748b;
+               text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    canvas { max-height: 280px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    td, th { padding: 0.4rem 0.6rem; text-align: left; border-bottom: 1px solid #f1f5f9; }
+    th { color: #94a3b8; font-weight: 500; }
+    .verdict-box { border-radius: 0.5rem; padding: 1rem 1.25rem; margin-top: 0.5rem;
+                   border: 1px solid; }
+    .verdict-tag { display: inline-block; font-weight: 700; font-size: 1rem;
+                   letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .verdict-text { font-size: 0.875rem; line-height: 1.6; }
+    .stats-row { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.85rem; }
+    .stat label { color: #94a3b8; display: block; font-size: 0.75rem; }
+    .stat value { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>CANSIM Time-Series Report</h1>
+  <h2>Table 14-10-0287-01 &nbsp;·&nbsp; Vector 2062810 &nbsp;·&nbsp; Fetched 2/28/2026, 9:55:30 AM</h2>
+
+  <div class="grid">
+
+    <!-- ── Chart 1: Time series ── -->
+    <div class="card full">
+      <h3>Time Series (training + validation)</h3>
+      <canvas id="tsChart"></canvas>
+    </div>
+
+    <!-- ── Chart 2: ACF ── -->
+    <div class="card">
+      <h3>Sample ACF — lags 1 … 24 (s = 12)</h3>
+      <canvas id="acfChart"></canvas>
+    </div>
+
+    <!-- ── Chart 3: Seasonal means ── -->
+    <div class="card">
+      <h3>Seasonal Means (by month)</h3>
+      <canvas id="smChart"></canvas>
+    </div>
+
+    <!-- ── Info panel ── -->
+    <div class="card">
+      <h3>Dataset Metadata</h3>
+      <table>
+        <tr><th>Table ID</th><td>14-10-0287-01</td></tr>
+        <tr><th>Vector ID</th><td>2062810</td></tr>
+        <tr><th>Training obs</th><td>100 (2016-07 → 2024-10)</td></tr>
+        <tr><th>Validation obs</th><td>12 (2024-11 → 2025-10)</td></tr>
+        <tr><th>Detected period (s)</th><td>12</td></tr>
+      </table>
+    </div>
+
+    <!-- ── Seasonality panel ── -->
+    <div class="card">
+      <h3>Seasonality Analysis</h3>
+      <div class="verdict-box"
+           style="background:#dcfce7;border-color:#166534;color:#166534">
+        <span class="verdict-tag">SEASONAL</span>
+        <p class="verdict-text" style="color:#1e293b">Both the ACF test (r_12 = 0.852, bound = ±0.196) and the F-test (F = 73.28, p = 0.0000) indicate significant seasonality with period s = 12. A seasonal differencing operator (1 − B^12) is recommended.</p>
+      </div>
+      <div class="stats-row">
+        <div class="stat">
+          <label>ACF r<sub>12</sub></label>
+          <value>0.8516</value>
+        </div>
+        <div class="stat">
+          <label>95 % bound</label>
+          <value>±0.1960</value>
+        </div>
+        <div class="stat">
+          <label>F statistic</label>
+          <value>73.280</value>
+        </div>
+        <div class="stat">
+          <label>F-test df</label>
+          <value>(11, 88)</value>
+        </div>
+        <div class="stat">
+          <label>p-value</label>
+          <value>< 0.0001</value>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /grid -->
+
+<script>
+(function () {
+  /* ── shared palette ── */
+  const BLUE   = "rgba(59,130,246,0.9)"
+  const BLUE_F = "rgba(59,130,246,0.15)"
+  const ORANGE = "rgba(249,115,22,0.9)"
+  const GREY   = "rgba(100,116,139,0.6)"
+  const RED    = "rgba(239,68,68,0.85)"
+
+  /* ── 1. Time-series chart ── */
+  new Chart(document.getElementById("tsChart"), {
+    type: "line",
+    data: {
+      labels: ["2016-07","2016-08","2016-09","2016-10","2016-11","2016-12","2017-01","2017-02","2017-03","2017-04","2017-05","2017-06","2017-07","2017-08","2017-09","2017-10","2017-11","2017-12","2018-01","2018-02","2018-03","2018-04","2018-05","2018-06","2018-07","2018-08","2018-09","2018-10","2018-11","2018-12","2019-01","2019-02","2019-03","2019-04","2019-05","2019-06","2019-07","2019-08","2019-09","2019-10","2019-11","2019-12","2020-01","2020-02","2020-03","2020-04","2020-05","2020-06","2020-07","2020-08","2020-09","2020-10","2020-11","2020-12","2021-01","2021-02","2021-03","2021-04","2021-05","2021-06","2021-07","2021-08","2021-09","2021-10","2021-11","2021-12","2022-01","2022-02","2022-03","2022-04","2022-05","2022-06","2022-07","2022-08","2022-09","2022-10","2022-11","2022-12","2023-01","2023-02","2023-03","2023-04","2023-05","2023-06","2023-07","2023-08","2023-09","2023-10","2023-11","2023-12","2024-01","2024-02","2024-03","2024-04","2024-05","2024-06","2024-07","2024-08","2024-09","2024-10","2024-11","2024-12","2025-01","2025-02","2025-03","2025-04","2025-05","2025-06","2025-07","2025-08","2025-09","2025-10"],
+      datasets: [
+        {
+          label: "Training (n = 100)",
+          data: [6.25,5.12,4.23,3.73,4.27,5.03,6.48,7.59,8.5,9.24,8.72,7.84,6.7,5.46,4.42,4.26,4.52,5.56,6.67,8.06,8.8,9.38,9.02,7.99,6.97,5.44,4.9,4.55,4.76,5.54,7.12,8.2,9.25,9.69,9.38,8.29,7,5.86,5.07,4.47,5.02,6.06,7.38,8.35,9.23,9.62,9.27,8.47,7.52,5.92,5.19,4.77,5.22,6.14,7.33,8.64,9.6,9.9,9.88,8.72,7.6,6.45,5.24,5.21,5.63,6.42,7.55,8.87,10.07,10.3,10.09,9.09,7.76,6.51,5.66,5.46,5.56,6.67,7.84,9.14,10.01,10.4,10.05,9.37,8.23,6.78,5.76,5.5,6.14,6.99,8,9.5,10.53,10.55,10.25,9.49,8.41,7.08,6.22,5.82,null,null,null,null,null,null,null,null,null,null,null,null],
+          borderColor: BLUE, backgroundColor: BLUE_F,
+          borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3,
+        },
+        {
+          label: "Validation (n = 12)",
+          data: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,6.33,7.1,8.58,9.85,10.47,10.84,10.47,9.8,8.52,7.19,6.33,6.04],
+          borderColor: ORANGE, borderWidth: 2,
+          borderDash: [6, 3], pointRadius: 3, fill: false,
+        },
+      ],
+    },
+    options: {
+      animation: false,
+      plugins: { legend: { position: "top" } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 20, maxRotation: 45 } },
+        y: { title: { display: true, text: "Value" } },
+      },
+    },
+  })
+
+  /* ── 2. ACF chart ── */
+  const acfVals   = [0.8747239224008052,0.5507002086150324,0.11344460118588894,-0.3197675774648225,-0.6358975714002237,-0.7538633794374238,-0.6461622193886941,-0.34680303195013185,0.058214558425692835,0.459256285900326,0.7487317354112989,0.8515682203408761,0.7430182922535143,0.4560454919078236,0.0712157092683169,-0.30820187423071227,-0.5830603554709068,-0.6846563281726594,-0.5901561887655883,-0.3283593424159503,0.02480343308141929,0.37333601812625294,0.6251097194773189,0.713683238239483]
+  const bound     = 0.196
+  const acfColors = acfVals.map((v, i) => {
+    if (i === 11 || i === 23) return RED
+    return Math.abs(v) > bound ? "rgba(239,68,68,0.6)" : GREY
+  })
+  new Chart(document.getElementById("acfChart"), {
+    type: "bar",
+    data: {
+      labels: ["lag 1","lag 2","lag 3","lag 4","lag 5","lag 6","lag 7","lag 8","lag 9","lag 10","lag 11","lag 12","lag 13","lag 14","lag 15","lag 16","lag 17","lag 18","lag 19","lag 20","lag 21","lag 22","lag 23","lag 24"],
+      datasets: [
+        {
+          label: "ACF",
+          data: acfVals,
+          backgroundColor: acfColors,
+          borderWidth: 0,
+        },
+        {
+          label: "+95% bound",
+          data: Array(24).fill(bound),
+          type: "line", borderColor: RED, borderWidth: 1.5,
+          borderDash: [4, 3], pointRadius: 0, fill: false,
+        },
+        {
+          label: "−95% bound",
+          data: Array(24).fill(-bound),
+          type: "line", borderColor: RED, borderWidth: 1.5,
+          borderDash: [4, 3], pointRadius: 0, fill: false,
+        },
+      ],
+    },
+    options: {
+      animation: false,
+      plugins: { legend: { position: "top" } },
+      scales: {
+        y: { min: -1, max: 1, title: { display: true, text: "r_k" } },
+      },
+    },
+  })
+
+  /* ── 3. Seasonal means chart ── */
+  const smVals = [7.296249999999999,8.54375,9.498750000000001,9.885,9.5825,8.657499999999999,7.382222222222222,6.068888888888889,5.187777777777779,4.863333333333333,5.14,6.0512500000000005]
+  const grandMean = smVals.reduce((a, b) => a + b, 0) / smVals.length
+  new Chart(document.getElementById("smChart"), {
+    type: "bar",
+    data: {
+      labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+      datasets: [
+        {
+          label: "Seasonal mean",
+          data: smVals,
+          backgroundColor: smVals.map((v) =>
+            v > grandMean ? "rgba(59,130,246,0.7)" : "rgba(249,115,22,0.7)"
+          ),
+          borderWidth: 0,
+        },
+        {
+          label: "Grand mean",
+          data: Array(12).fill(grandMean),
+          type: "line", borderColor: "#64748b", borderWidth: 1.5,
+          borderDash: [4, 3], pointRadius: 0, fill: false,
+        },
+      ],
+    },
+    options: {
+      animation: false,
+      plugins: { legend: { position: "top" } },
+      scales: { y: { title: { display: true, text: "Mean value" } } },
+    },
+  })
+})()
+</script>
+</body>
+</html>
