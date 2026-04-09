@@ -9,6 +9,7 @@
   "scripts": {
     "scan": "npm run scan -w @statcan/scanner",
     "worker": "npm run worker -w @statcan/scanner",
+    "scan:auto": "npm run scan:auto -w @statcan/scanner --",
     "build": "npm run build -w @statcan/web",
     "dev": "npm run dev -w @statcan/web",
     "db:generate": "drizzle-kit generate",

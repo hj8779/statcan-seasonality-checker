@@ -33,7 +33,11 @@ export default function ExportRow({ v, a }: Props) {
 
   const handleStatcan = () => {
     if (!v.table_id) return
-    const pid = v.table_id.replace(/-/g, '')
+    // Normalise to a 10-digit PID regardless of how it was stored:
+    //   "14-10-0287-01" → remove dashes → "1410028701"  (already correct)
+    //   "14100287"      → 8-digit numeric → pad to 10 by appending "01"
+    let pid = v.table_id.replace(/-/g, '')
+    if (/^\d{8}$/.test(pid)) pid = pid + '01'
     window.open(`https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=${pid}`, '_blank')
   }
 

@@ -1,0 +1,17 @@
+# Environment / secrets — NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output (managed separately in docs/)
+packages/*/dist/
+
+# Checkpoint file (probe scanner state)
+last_checkpoint.json
+
+# Editor
+.DS_Store
+*.log

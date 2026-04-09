@@ -5,6 +5,7 @@ import DbPill from './components/DbPill'
 import Toolbar from './components/Toolbar'
 import VectorTable from './components/VectorTable'
 import DetailPanel from './components/DetailPanel'
+import CoverageMap from './components/CoverageMap'
 
 export default function App() {
   const dispatch = useAppDispatch()
@@ -19,6 +20,8 @@ export default function App() {
         <h1>CANSIM Vector Explorer</h1>
         <p>Browse scanned Statistics Canada vectors, view seasonality reports, and export data.</p>
       </header>
+
+      <CoverageMap />
 
       <div className="card">
         <DbPill />

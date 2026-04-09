@@ -42,6 +42,15 @@ const tableIdToProductId = (tableId: string): number => {
 }
 
 /**
+ * Convert a numeric WDS product ID back to a dash-separated CANSIM table ID.
+ * 14100287 → "14-10-0287-01"  (always appends "-01" for the English edition)
+ */
+const productIdToTableId = (productId: number): string => {
+  const s = String(productId).padStart(8, "0")
+  return `${s.slice(0, 2)}-${s.slice(2, 4)}-${s.slice(4, 8)}-01`
+}
+
+/**
  * Map WDS frequency codes to a seasonal period s.
  *
  *  6 = Monthly   → s = 12
@@ -395,9 +404,12 @@ export const scanVectorId = (
     const acfScore     = s !== null && values.length > s ? acfAtLag(values, s) : null
     const latestPts    = dataPoints.slice(-5).reverse()
 
+    const rawProductId = (info.productId ?? (dataItem.object.productId as unknown)) as number | undefined
+    const tableId = rawProductId != null ? productIdToTableId(rawProductId) : ""
+
     yield* upsertVector({
       vectorId,
-      tableId:       String((info.productId ?? (dataItem.object.productId as unknown)) ?? ""),
+      tableId,
       seriesTitle:   (info.SeriesTitleEn as string | undefined) ?? null,
       frequencyCode: freqCode,
       startDate:     (info.startDate as string | undefined)?.slice(0, 7) ?? null,
